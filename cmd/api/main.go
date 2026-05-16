@@ -6,6 +6,7 @@ import (
 	"github.com/joakim/fintrack-api/internal/config"
 	"github.com/joakim/fintrack-api/internal/database"
 	"github.com/joakim/fintrack-api/internal/handler"
+	"github.com/joakim/fintrack-api/internal/repository/postgres"
 	"github.com/joakim/fintrack-api/internal/router"
 	"github.com/joakim/fintrack-api/internal/service"
 )
@@ -27,15 +28,29 @@ func main() {
 	}
 
 	sqlDB, _ := db.DB()
+
+	userRepo := postgres.NewUserRepo(db)
+	sessionRepo := postgres.NewSessionRepo(db)
+
 	healthSvc := service.NewHealthService("0.1.0", sqlDB)
+	authSvc := service.NewAuthService(userRepo, sessionRepo, service.AuthServiceConfig{
+		AccessSecret:        cfg.JWTAccessSecret,
+		RefreshSecret:       cfg.JWTRefreshSecret,
+		AccessExpiryMinutes: cfg.JWTAccessExpiryMinutes,
+		RefreshExpiryDays:   cfg.JWTRefreshExpiryDays,
+	})
+
 	healthHandler := handler.NewHealthHandler(healthSvc)
+	authHandler := handler.NewAuthHandler(authSvc)
 
 	r := router.New(router.RouterConfig{
-		Env:            cfg.AppEnv,
-		FrontendOrigin: cfg.AppFrontendOrigin,
-		SwaggerEnabled: cfg.SwaggerEnabled,
+		Env:             cfg.AppEnv,
+		FrontendOrigin:  cfg.AppFrontendOrigin,
+		JWTAccessSecret: cfg.JWTAccessSecret,
+		SwaggerEnabled:  cfg.SwaggerEnabled,
 	}, router.Handlers{
 		Health: healthHandler,
+		Auth:   authHandler,
 	})
 
 	log.Printf("starting server on :%s (env=%s)", cfg.AppPort, cfg.AppEnv)

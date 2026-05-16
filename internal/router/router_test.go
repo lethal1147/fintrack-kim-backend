@@ -22,9 +22,10 @@ func buildRouter(swaggerEnabled bool) *gin.Engine {
 	// Import the handler package inline via the HealthChecker interface
 	// (avoids circular imports — handler imports response, router imports handler)
 	return newTestRouter(RouterConfig{
-		Env:            "development",
-		FrontendOrigin: "http://localhost:3000",
-		SwaggerEnabled: swaggerEnabled,
+		Env:             "development",
+		FrontendOrigin:  "http://localhost:3000",
+		JWTAccessSecret: "test-secret",
+		SwaggerEnabled:  swaggerEnabled,
 	})
 }
 

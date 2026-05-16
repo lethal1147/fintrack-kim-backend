@@ -12,6 +12,7 @@ import (
 
 type Handlers struct {
 	Health *handler.HealthHandler
+	Auth   *handler.AuthHandler
 }
 
 func New(cfg RouterConfig, h Handlers) *gin.Engine {
@@ -27,6 +28,20 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 
 	r.GET("/health", h.Health.HealthCheck)
 
+	auth := r.Group("/auth")
+	{
+		auth.POST("/register", h.Auth.Register)
+		auth.POST("/login", h.Auth.Login)
+		auth.POST("/refresh", h.Auth.Refresh)
+		protected := auth.Group("")
+		protected.Use(middleware.Auth(cfg.JWTAccessSecret))
+		{
+			protected.POST("/logout", h.Auth.Logout)
+			protected.POST("/logout-all", h.Auth.LogoutAll)
+			protected.GET("/me", h.Auth.Me)
+		}
+	}
+
 	if cfg.SwaggerEnabled {
 		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	}
@@ -35,7 +50,8 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 }
 
 type RouterConfig struct {
-	Env            string
-	FrontendOrigin string
-	SwaggerEnabled bool
+	Env             string
+	FrontendOrigin  string
+	JWTAccessSecret string
+	SwaggerEnabled  bool
 }
