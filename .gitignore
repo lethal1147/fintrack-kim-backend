@@ -1,0 +1,17 @@
+# Binaries
+bin/
+*.exe
+
+# Environment
+.env
+
+# Go build cache
+*.test
+coverage.out
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+
+# Swagger generated (keep docs/ but ignore nothing here — committed intentionally)
