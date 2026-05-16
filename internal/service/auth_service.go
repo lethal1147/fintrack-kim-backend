@@ -45,24 +45,24 @@ type LoginInput struct {
 
 // UserInfo is the safe public representation of a user.
 type UserInfo struct {
-	ID        string
-	Email     string
-	Name      string
-	AvatarURL string
-	Provider  string
-	CreatedAt time.Time
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	AvatarURL string    `json:"avatar_url"`
+	Provider  string    `json:"provider"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // AuthResponse is returned by Register and Login.
 type AuthResponse struct {
-	AccessToken  string
-	RefreshToken string
-	User         UserInfo
+	AccessToken  string   `json:"access_token"`
+	RefreshToken string   `json:"refresh_token"`
+	User         UserInfo `json:"user"`
 }
 
 // RefreshResponse is returned by Refresh.
 type RefreshResponse struct {
-	AccessToken string
+	AccessToken string `json:"access_token"`
 }
 
 // AuthService implements AuthServiceInterface.
