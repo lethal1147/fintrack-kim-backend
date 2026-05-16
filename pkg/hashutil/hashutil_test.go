@@ -33,3 +33,12 @@ func TestHash_MinCost(t *testing.T) {
 		t.Errorf("want cost >= 12, got %d", c)
 	}
 }
+
+func TestHash_UniqueOutputs(t *testing.T) {
+	// Same plaintext produces different hashes (bcrypt salt)
+	h1, _ := Hash("same-password")
+	h2, _ := Hash("same-password")
+	if h1 == h2 {
+		t.Error("bcrypt must produce unique hashes for the same input")
+	}
+}

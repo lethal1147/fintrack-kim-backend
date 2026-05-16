@@ -66,3 +66,19 @@ func TestError_UnknownError(t *testing.T) {
 		t.Errorf("want 500, got %d", w.Code)
 	}
 }
+
+func TestCreated(t *testing.T) {
+	c, w := newContext()
+	Created(c, map[string]string{"id": "new-123"})
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("want 201, got %d", w.Code)
+	}
+	var body envelope
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.Success {
+		t.Error("success must be true")
+	}
+}
