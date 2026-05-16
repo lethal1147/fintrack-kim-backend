@@ -1,0 +1,28 @@
+basePath: /
+host: localhost:8080
+info:
+  contact: {}
+  description: Personal finance tracker API
+  title: FinTrack API
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      description: Returns server version and database connectivity status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - system
+swagger: "2.0"
