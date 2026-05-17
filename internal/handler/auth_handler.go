@@ -10,12 +10,16 @@ import (
 	"github.com/joakim/fintrack-api/pkg/response"
 )
 
+const refreshTokenCookie = "refresh_token"
+
 type AuthHandler struct {
-	svc service.AuthServiceInterface
+	svc          service.AuthServiceInterface
+	cookieSecure bool
 }
 
-func NewAuthHandler(svc service.AuthServiceInterface) *AuthHandler {
-	return &AuthHandler{svc: svc}
+// NewAuthHandler creates an AuthHandler. cookieSecure should be true in production (HTTPS).
+func NewAuthHandler(svc service.AuthServiceInterface, cookieSecure bool) *AuthHandler {
+	return &AuthHandler{svc: svc, cookieSecure: cookieSecure}
 }
 
 type registerRequest struct {
@@ -29,17 +33,33 @@ type loginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-type refreshRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
+func (h *AuthHandler) setRefreshCookie(c *gin.Context, token string) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     refreshTokenCookie,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   h.cookieSecure,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   30 * 24 * 60 * 60,
+	})
 }
 
-type logoutRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
+func (h *AuthHandler) clearRefreshCookie(c *gin.Context) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     refreshTokenCookie,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   h.cookieSecure,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1,
+	})
 }
 
 // Register godoc
 // @Summary      Register a new user
-// @Description  Creates a local user account and returns an access/refresh token pair
+// @Description  Creates a local user account. Sets refresh_token as an httpOnly cookie and returns access_token + user in the body.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -64,12 +84,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Created(c, resp)
+
+	h.setRefreshCookie(c, resp.RefreshToken)
+	response.Created(c, gin.H{
+		"access_token": resp.AccessToken,
+		"user":         resp.User,
+	})
 }
 
 // Login godoc
 // @Summary      Login
-// @Description  Verifies credentials and returns an access/refresh token pair
+// @Description  Verifies credentials. Sets refresh_token as an httpOnly cookie and returns access_token + user in the body.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -95,28 +120,30 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, resp)
+
+	h.setRefreshCookie(c, resp.RefreshToken)
+	response.Success(c, gin.H{
+		"access_token": resp.AccessToken,
+		"user":         resp.User,
+	})
 }
 
 // Refresh godoc
 // @Summary      Refresh access token
-// @Description  Issues a new access token using a valid refresh token
+// @Description  Issues a new access token by reading the refresh_token httpOnly cookie. No request body required.
 // @Tags         auth
-// @Accept       json
 // @Produce      json
-// @Param        body  body      refreshRequest  true  "Refresh token"
 // @Success      200   {object}  map[string]interface{}
-// @Failure      400   {object}  map[string]interface{}
 // @Failure      401   {object}  map[string]interface{}
 // @Router       /auth/refresh [post]
 func (h *AuthHandler) Refresh(c *gin.Context) {
-	var req refreshRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, apperror.BadRequest(err.Error()))
+	cookie, err := c.Cookie(refreshTokenCookie)
+	if err != nil {
+		response.Error(c, apperror.Unauthorized("no refresh token"))
 		return
 	}
 
-	resp, err := h.svc.Refresh(req.RefreshToken)
+	resp, err := h.svc.Refresh(cookie)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -126,26 +153,20 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 // Logout godoc
 // @Summary      Logout current session
-// @Description  Invalidates the given refresh token (deletes the session)
+// @Description  Invalidates the session identified by the refresh_token cookie and clears it.
 // @Tags         auth
-// @Accept       json
 // @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      logoutRequest  true  "Refresh token to invalidate"
-// @Success      200   {object}  map[string]interface{}
-// @Failure      401   {object}  map[string]interface{}
+// @Success      200  {object}  map[string]interface{}
 // @Router       /auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
-	var req logoutRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, apperror.BadRequest(err.Error()))
-		return
+	cookie, err := c.Cookie(refreshTokenCookie)
+	if err == nil {
+		if svcErr := h.svc.Logout(cookie); svcErr != nil {
+			response.Error(c, svcErr)
+			return
+		}
 	}
-
-	if err := h.svc.Logout(req.RefreshToken); err != nil {
-		response.Error(c, err)
-		return
-	}
+	h.clearRefreshCookie(c)
 	response.Success(c, gin.H{"message": "logged out"})
 }
 

@@ -10,20 +10,6 @@ definitions:
     - email
     - password
     type: object
-  handler.logoutRequest:
-    properties:
-      refresh_token:
-        type: string
-    required:
-    - refresh_token
-    type: object
-  handler.refreshRequest:
-    properties:
-      refresh_token:
-        type: string
-    required:
-    - refresh_token
-    type: object
   handler.registerRequest:
     properties:
       email:
@@ -49,7 +35,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Verifies credentials and returns an access/refresh token pair
+      description: Verifies credentials. Sets refresh_token as an httpOnly cookie
+        and returns access_token + user in the body.
       parameters:
       - description: Login payload
         in: body
@@ -80,16 +67,8 @@ paths:
       - auth
   /auth/logout:
     post:
-      consumes:
-      - application/json
-      description: Invalidates the given refresh token (deletes the session)
-      parameters:
-      - description: Refresh token to invalidate
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/handler.logoutRequest'
+      description: Invalidates the session identified by the refresh_token cookie
+        and clears it.
       produces:
       - application/json
       responses:
@@ -98,13 +77,6 @@ paths:
           schema:
             additionalProperties: true
             type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - BearerAuth: []
       summary: Logout current session
       tags:
       - auth
@@ -158,26 +130,13 @@ paths:
       - auth
   /auth/refresh:
     post:
-      consumes:
-      - application/json
-      description: Issues a new access token using a valid refresh token
-      parameters:
-      - description: Refresh token
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/handler.refreshRequest'
+      description: Issues a new access token by reading the refresh_token httpOnly
+        cookie. No request body required.
       produces:
       - application/json
       responses:
         "200":
           description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
           schema:
             additionalProperties: true
             type: object
@@ -193,8 +152,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Creates a local user account and returns an access/refresh token
-        pair
+      description: Creates a local user account. Sets refresh_token as an httpOnly
+        cookie and returns access_token + user in the body.
       parameters:
       - description: Registration payload
         in: body

@@ -18,6 +18,6 @@ func (s *stubAuthSvc) GetProfile(_ string) (*service.UserInfo, error)           
 // newTestRouter wires stub handlers into the real router.New for integration tests.
 func newTestRouter(cfg RouterConfig) *gin.Engine {
 	healthHandler := handler.NewHealthHandler(&stubHealthSvc{})
-	authHandler := handler.NewAuthHandler(&stubAuthSvc{})
+	authHandler := handler.NewAuthHandler(&stubAuthSvc{}, false)
 	return New(cfg, Handlers{Health: healthHandler, Auth: authHandler})
 }

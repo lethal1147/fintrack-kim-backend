@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/auth/login": {
             "post": {
-                "description": "Verifies credentials and returns an access/refresh token pair",
+                "description": "Verifies credentials. Sets refresh_token as an httpOnly cookie and returns access_token + user in the body.",
                 "consumes": [
                     "application/json"
                 ],
@@ -66,15 +66,7 @@ const docTemplate = `{
         },
         "/auth/logout": {
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Invalidates the given refresh token (deletes the session)",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Invalidates the session identified by the refresh_token cookie and clears it.",
                 "produces": [
                     "application/json"
                 ],
@@ -82,27 +74,9 @@ const docTemplate = `{
                     "auth"
                 ],
                 "summary": "Logout current session",
-                "parameters": [
-                    {
-                        "description": "Refresh token to invalidate",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.logoutRequest"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -186,10 +160,7 @@ const docTemplate = `{
         },
         "/auth/refresh": {
             "post": {
-                "description": "Issues a new access token using a valid refresh token",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Issues a new access token by reading the refresh_token httpOnly cookie. No request body required.",
                 "produces": [
                     "application/json"
                 ],
@@ -197,27 +168,9 @@ const docTemplate = `{
                     "auth"
                 ],
                 "summary": "Refresh access token",
-                "parameters": [
-                    {
-                        "description": "Refresh token",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.refreshRequest"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -235,7 +188,7 @@ const docTemplate = `{
         },
         "/auth/register": {
             "post": {
-                "description": "Creates a local user account and returns an access/refresh token pair",
+                "description": "Creates a local user account. Sets refresh_token as an httpOnly cookie and returns access_token + user in the body.",
                 "consumes": [
                     "application/json"
                 ],
@@ -323,28 +276,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "password": {
-                    "type": "string"
-                }
-            }
-        },
-        "handler.logoutRequest": {
-            "type": "object",
-            "required": [
-                "refresh_token"
-            ],
-            "properties": {
-                "refresh_token": {
-                    "type": "string"
-                }
-            }
-        },
-        "handler.refreshRequest": {
-            "type": "object",
-            "required": [
-                "refresh_token"
-            ],
-            "properties": {
-                "refresh_token": {
                     "type": "string"
                 }
             }

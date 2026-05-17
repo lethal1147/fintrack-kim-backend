@@ -41,7 +41,7 @@ func main() {
 	})
 
 	healthHandler := handler.NewHealthHandler(healthSvc)
-	authHandler := handler.NewAuthHandler(authSvc)
+	authHandler := handler.NewAuthHandler(authSvc, cfg.AppCookieSecure)
 
 	r := router.New(router.RouterConfig{
 		Env:             cfg.AppEnv,

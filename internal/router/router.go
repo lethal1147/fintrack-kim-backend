@@ -33,10 +33,10 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 		auth.POST("/register", h.Auth.Register)
 		auth.POST("/login", h.Auth.Login)
 		auth.POST("/refresh", h.Auth.Refresh)
+		auth.POST("/logout", h.Auth.Logout) // public — cookie identifies the session
 		protected := auth.Group("")
 		protected.Use(middleware.Auth(cfg.JWTAccessSecret))
 		{
-			protected.POST("/logout", h.Auth.Logout)
 			protected.POST("/logout-all", h.Auth.LogoutAll)
 			protected.GET("/me", h.Auth.Me)
 		}

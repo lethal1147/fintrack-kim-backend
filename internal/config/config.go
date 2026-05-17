@@ -30,7 +30,8 @@ type Config struct {
 	FacebookClientSecret string `mapstructure:"FACEBOOK_CLIENT_SECRET"`
 	OAuthRedirectBaseURL string `mapstructure:"OAUTH_REDIRECT_BASE_URL"`
 
-	SwaggerEnabled bool `mapstructure:"SWAGGER_ENABLED"`
+	SwaggerEnabled   bool `mapstructure:"SWAGGER_ENABLED"`
+	AppCookieSecure  bool `mapstructure:"APP_COOKIE_SECURE"`
 }
 
 // DSN returns the PostgreSQL connection string.
@@ -57,6 +58,7 @@ func Load() (*Config, error) {
 	v.SetDefault("JWT_ACCESS_EXPIRY_MINUTES", 15)
 	v.SetDefault("JWT_REFRESH_EXPIRY_DAYS", 30)
 	v.SetDefault("SWAGGER_ENABLED", true)
+	v.SetDefault("APP_COOKIE_SECURE", false)
 	// Empty-string defaults so Viper tracks these keys and AutomaticEnv can override them.
 	v.SetDefault("JWT_ACCESS_SECRET", "")
 	v.SetDefault("JWT_REFRESH_SECRET", "")
