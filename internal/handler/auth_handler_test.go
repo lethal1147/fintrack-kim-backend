@@ -277,3 +277,56 @@ func TestMeHandler_Unauthenticated(t *testing.T) {
 		t.Errorf("want 401, got %d", w.Code)
 	}
 }
+
+// -- Missing-fields validation paths --
+
+func TestLoginHandler_MissingFields(t *testing.T) {
+	w := doPost(authRouter(&mockAuthSvc{}), "/auth/login", `{}`)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("want 400 for missing login body, got %d", w.Code)
+	}
+}
+
+func TestRefreshHandler_MissingFields(t *testing.T) {
+	w := doPost(authRouter(&mockAuthSvc{}), "/auth/refresh", `{}`)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("want 400 for missing refresh_token, got %d", w.Code)
+	}
+}
+
+func TestLogoutHandler_MissingBody(t *testing.T) {
+	tok := signTestToken("user-1")
+	w := doPost(authRouter(&mockAuthSvc{}), "/auth/logout", `{}`, tok)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("want 400 for missing refresh_token in logout body, got %d", w.Code)
+	}
+}
+
+// -- Service error paths --
+
+func TestLogoutHandler_ServiceError(t *testing.T) {
+	tok := signTestToken("user-1")
+	svc := &mockAuthSvc{logoutErr: apperror.Internal("db down")}
+	w := doPost(authRouter(svc), "/auth/logout", `{"refresh_token":"tok"}`, tok)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("want 500, got %d", w.Code)
+	}
+}
+
+func TestLogoutAllHandler_ServiceError(t *testing.T) {
+	tok := signTestToken("user-1")
+	svc := &mockAuthSvc{logoutErr: apperror.Internal("db down")}
+	w := doPost(authRouter(svc), "/auth/logout-all", ``, tok)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("want 500, got %d", w.Code)
+	}
+}
+
+func TestMeHandler_ProfileNotFound(t *testing.T) {
+	tok := signTestToken("user-1")
+	svc := &mockAuthSvc{profileErr: apperror.NotFound("user not found")}
+	w := doGet(authRouter(svc), "/auth/me", tok)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("want 404, got %d", w.Code)
+	}
+}

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -62,6 +63,7 @@ func (m *mockUserRepo) Update(user *domain.User) error {
 
 type mockSessionRepo struct {
 	byToken         map[string]*domain.Session
+	createErr       error
 	deleteAllCalled bool
 	deleteAllUserID string
 }
@@ -71,6 +73,9 @@ func newMockSessionRepo() *mockSessionRepo {
 }
 
 func (m *mockSessionRepo) Create(s *domain.Session) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
 	if s.ID == "" {
 		s.ID = "sess-mock"
 	}
@@ -358,5 +363,52 @@ func TestGetProfile_NotFound(t *testing.T) {
 	ae, ok := err.(*apperror.AppError)
 	if !ok || ae.Code != "NOT_FOUND" {
 		t.Errorf("want NOT_FOUND, got %v", err)
+	}
+}
+
+// -- Error path coverage --
+
+func TestRegister_PasswordTooLong(t *testing.T) {
+	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), testCfg())
+	longPw := strings.Repeat("a", 73) // bcrypt rejects passwords > 72 bytes
+	_, err := svc.Register(AuthInput{
+		Email: "long@example.com", Password: longPw, Name: "Long",
+	})
+	if err == nil {
+		t.Fatal("expected error for password exceeding 72 bytes")
+	}
+}
+
+func TestRegister_CreateUserFails(t *testing.T) {
+	userRepo := newMockUserRepo()
+	userRepo.createErr = apperror.Internal("db unavailable")
+	svc := NewAuthService(userRepo, newMockSessionRepo(), testCfg())
+
+	_, err := svc.Register(AuthInput{
+		Email: "fail@example.com", Password: "password123", Name: "Fail",
+	})
+	if err == nil {
+		t.Fatal("expected error when user repo Create fails")
+	}
+}
+
+func TestLogin_SessionCreateFails(t *testing.T) {
+	userRepo := newMockUserRepo()
+	sessionRepo := newMockSessionRepo()
+	svc := NewAuthService(userRepo, sessionRepo, testCfg())
+
+	// Register succeeds (session created for register)
+	if _, err := svc.Register(AuthInput{
+		Email: "ivy@example.com", Password: "password123", Name: "Ivy",
+	}); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// Make all subsequent session creates fail before Login
+	sessionRepo.createErr = apperror.Internal("db unavailable")
+
+	_, err := svc.Login(LoginInput{Email: "ivy@example.com", Password: "password123"})
+	if err == nil {
+		t.Fatal("expected error when session repo Create fails during Login")
 	}
 }
