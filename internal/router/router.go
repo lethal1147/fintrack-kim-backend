@@ -11,8 +11,9 @@ import (
 )
 
 type Handlers struct {
-	Health *handler.HealthHandler
-	Auth   *handler.AuthHandler
+	Health      *handler.HealthHandler
+	Auth        *handler.AuthHandler
+	Transaction *handler.TransactionHandler
 }
 
 func New(cfg RouterConfig, h Handlers) *gin.Engine {
@@ -40,6 +41,17 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 			protected.POST("/logout-all", h.Auth.LogoutAll)
 			protected.GET("/me", h.Auth.Me)
 		}
+	}
+
+	tx := r.Group("/transactions")
+	tx.Use(middleware.Auth(cfg.JWTAccessSecret))
+	{
+		tx.GET("", h.Transaction.List)
+		tx.POST("", h.Transaction.Create)
+		tx.GET("/summary", h.Transaction.Summary) // must be before /:id
+		tx.GET("/:id", h.Transaction.Get)
+		tx.PUT("/:id", h.Transaction.Update)
+		tx.DELETE("/:id", h.Transaction.Delete)
 	}
 
 	if cfg.SwaggerEnabled {

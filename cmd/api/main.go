@@ -31,6 +31,7 @@ func main() {
 
 	userRepo := postgres.NewUserRepo(db)
 	sessionRepo := postgres.NewSessionRepo(db)
+	txRepo := postgres.NewTransactionRepo(db)
 
 	healthSvc := service.NewHealthService("0.1.0", sqlDB)
 	authSvc := service.NewAuthService(userRepo, sessionRepo, service.AuthServiceConfig{
@@ -39,9 +40,11 @@ func main() {
 		AccessExpiryMinutes: cfg.JWTAccessExpiryMinutes,
 		RefreshExpiryDays:   cfg.JWTRefreshExpiryDays,
 	})
+	txSvc := service.NewTransactionService(txRepo)
 
 	healthHandler := handler.NewHealthHandler(healthSvc)
 	authHandler := handler.NewAuthHandler(authSvc, cfg.AppCookieSecure)
+	txHandler := handler.NewTransactionHandler(txSvc)
 
 	r := router.New(router.RouterConfig{
 		Env:             cfg.AppEnv,
@@ -49,8 +52,9 @@ func main() {
 		JWTAccessSecret: cfg.JWTAccessSecret,
 		SwaggerEnabled:  cfg.SwaggerEnabled,
 	}, router.Handlers{
-		Health: healthHandler,
-		Auth:   authHandler,
+		Health:      healthHandler,
+		Auth:        authHandler,
+		Transaction: txHandler,
 	})
 
 	log.Printf("starting server on :%s (env=%s)", cfg.AppPort, cfg.AppEnv)
