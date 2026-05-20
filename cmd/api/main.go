@@ -41,10 +41,12 @@ func main() {
 		RefreshExpiryDays:   cfg.JWTRefreshExpiryDays,
 	})
 	txSvc := service.NewTransactionService(txRepo)
+	analyticsSvc := service.NewAnalyticsService(txRepo)
 
 	healthHandler := handler.NewHealthHandler(healthSvc)
 	authHandler := handler.NewAuthHandler(authSvc, cfg.AppCookieSecure)
 	txHandler := handler.NewTransactionHandler(txSvc)
+	analyticsHandler := handler.NewAnalyticsHandler(analyticsSvc)
 
 	r := router.New(router.RouterConfig{
 		Env:             cfg.AppEnv,
@@ -55,6 +57,7 @@ func main() {
 		Health:      healthHandler,
 		Auth:        authHandler,
 		Transaction: txHandler,
+		Analytics:   analyticsHandler,
 	})
 
 	log.Printf("starting server on :%s (env=%s)", cfg.AppPort, cfg.AppEnv)

@@ -60,6 +60,7 @@ type CategoryStat struct {
 	Type     TransactionType
 	Total    float64
 	Count    int
+	Pct      float64 // % of total for this type within the queried range
 }
 
 type MonthStat struct {

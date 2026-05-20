@@ -14,6 +14,7 @@ type Handlers struct {
 	Health      *handler.HealthHandler
 	Auth        *handler.AuthHandler
 	Transaction *handler.TransactionHandler
+	Analytics   *handler.AnalyticsHandler
 }
 
 func New(cfg RouterConfig, h Handlers) *gin.Engine {
@@ -48,7 +49,8 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 	{
 		tx.GET("", h.Transaction.List)
 		tx.POST("", h.Transaction.Create)
-		tx.GET("/summary", h.Transaction.Summary) // must be before /:id
+		tx.GET("/summary", h.Transaction.Summary)     // must be before /:id
+		tx.GET("/analytics", h.Analytics.Analytics)   // must be before /:id
 		tx.GET("/:id", h.Transaction.Get)
 		tx.PUT("/:id", h.Transaction.Update)
 		tx.DELETE("/:id", h.Transaction.Delete)
