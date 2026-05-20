@@ -15,6 +15,7 @@ type Handlers struct {
 	Auth        *handler.AuthHandler
 	Transaction *handler.TransactionHandler
 	Analytics   *handler.AnalyticsHandler
+	Recurring   *handler.RecurringHandler
 }
 
 func New(cfg RouterConfig, h Handlers) *gin.Engine {
@@ -54,6 +55,17 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 		tx.GET("/:id", h.Transaction.Get)
 		tx.PUT("/:id", h.Transaction.Update)
 		tx.DELETE("/:id", h.Transaction.Delete)
+	}
+
+	rec := r.Group("/recurring")
+	rec.Use(middleware.Auth(cfg.JWTAccessSecret))
+	{
+		rec.GET("", h.Recurring.List)
+		rec.POST("", h.Recurring.Create)
+		rec.POST("/process", h.Recurring.Process) // must be before /:id
+		rec.PUT("/:id", h.Recurring.Update)
+		rec.PATCH("/:id/status", h.Recurring.ToggleStatus)
+		rec.DELETE("/:id", h.Recurring.Delete)
 	}
 
 	if cfg.SwaggerEnabled {
