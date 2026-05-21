@@ -10,12 +10,12 @@ import (
 )
 
 type budgetModel struct {
-	ID        string `gorm:"primaryKey"`
-	UserID    string
-	Name      string
-	GroupName string `gorm:"column:group_name"`
-	Budgeted  float64
-	Color     string
+	ID        string  `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	UserID    string  `gorm:"not null;index"`
+	Name      string  `gorm:"not null"`
+	GroupName string  `gorm:"column:group_name;not null"`
+	Budgeted  float64 `gorm:"not null;type:decimal(12,2)"`
+	Color     string  `gorm:"not null"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
