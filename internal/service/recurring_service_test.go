@@ -246,6 +246,39 @@ func TestProcess_PausedSkipped(t *testing.T) {
 	}
 }
 
+func TestAdvance_EndOfMonth_Monthly(t *testing.T) {
+	// June 30 (last day) → monthly → July 31 (last day), no weekend adjust (2026-07-31 is Fri)
+	june30 := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
+	result := advanceNextDue(june30, domain.FrequencyMonthly)
+	expected := time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC)
+	if !result.Equal(expected) {
+		t.Errorf("advance(2026-06-30, monthly) = %v, want %v", result, expected)
+	}
+}
+
+func TestAdvance_EndOfMonth_KeepsEndOfMonth(t *testing.T) {
+	// May 31 → June 30 → July 31 — end-of-month stays at end-of-month
+	may31 := time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC)
+	jun30 := advanceNextDue(may31, domain.FrequencyMonthly)
+	if jun30.Month() != time.June || !isLastDayOfMonth(jun30) {
+		t.Errorf("advance(May 31) = %v, want last day of June", jun30)
+	}
+	jul31 := advanceNextDue(jun30, domain.FrequencyMonthly)
+	if jul31.Month() != time.July || !isLastDayOfMonth(jul31) {
+		t.Errorf("advance(Jun 30) = %v, want last day of July", jul31)
+	}
+}
+
+func TestAdvance_EndOfMonth_Annual(t *testing.T) {
+	// March 31 → annual → March 31 next year
+	mar31 := time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC)
+	result := advanceNextDue(mar31, domain.FrequencyAnnual)
+	expected := time.Date(2027, 3, 31, 0, 0, 0, 0, time.UTC)
+	if !result.Equal(expected) {
+		t.Errorf("advance(2026-03-31, annual) = %v, want %v", result, expected)
+	}
+}
+
 func TestProcess_NothingDue(t *testing.T) {
 	tomorrow := time.Now().UTC().AddDate(0, 0, 1)
 	repo := &mockRecurringRepo{items: []domain.RecurringItem{{

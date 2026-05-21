@@ -128,13 +128,33 @@ func advanceNextDue(d time.Time, freq domain.RecurringFrequency) time.Time {
 	case domain.FrequencyWeekly:
 		return d.AddDate(0, 0, 7)
 	case domain.FrequencyMonthly:
-		next = d.AddDate(0, 1, 0)
+		if isLastDayOfMonth(d) {
+			next = lastDayOfNextMonth(d)
+		} else {
+			next = d.AddDate(0, 1, 0)
+		}
 	case domain.FrequencyAnnual:
-		next = d.AddDate(1, 0, 0)
+		if isLastDayOfMonth(d) {
+			// last day of the same month next year
+			next = time.Date(d.Year()+1, d.Month()+1, 0, 0, 0, 0, 0, time.UTC)
+		} else {
+			next = d.AddDate(1, 0, 0)
+		}
 	default:
-		return d.AddDate(0, 1, 0)
+		next = d.AddDate(0, 1, 0)
 	}
 	return adjustWeekend(next)
+}
+
+// isLastDayOfMonth reports whether d is the last day of its month.
+func isLastDayOfMonth(d time.Time) bool {
+	return d.AddDate(0, 0, 1).Month() != d.Month()
+}
+
+// lastDayOfNextMonth returns the last calendar day of the month following d.
+func lastDayOfNextMonth(d time.Time) time.Time {
+	// day 0 of month+2 = last day of month+1
+	return time.Date(d.Year(), d.Month()+2, 0, 0, 0, 0, 0, time.UTC)
 }
 
 func adjustWeekend(d time.Time) time.Time {
