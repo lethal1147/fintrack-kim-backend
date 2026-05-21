@@ -33,6 +33,7 @@ func main() {
 	sessionRepo := postgres.NewSessionRepo(db)
 	txRepo := postgres.NewTransactionRepo(db)
 	recurringRepo := postgres.NewRecurringRepo(db)
+	budgetRepo := postgres.NewBudgetRepo(db)
 
 	healthSvc := service.NewHealthService("0.1.0", sqlDB)
 	authSvc := service.NewAuthService(userRepo, sessionRepo, service.AuthServiceConfig{
@@ -44,12 +45,14 @@ func main() {
 	txSvc := service.NewTransactionService(txRepo)
 	analyticsSvc := service.NewAnalyticsService(txRepo)
 	recurringSvc := service.NewRecurringService(recurringRepo, txRepo)
+	budgetSvc := service.NewBudgetService(budgetRepo, txRepo)
 
 	healthHandler := handler.NewHealthHandler(healthSvc)
 	authHandler := handler.NewAuthHandler(authSvc, cfg.AppCookieSecure)
 	txHandler := handler.NewTransactionHandler(txSvc)
 	analyticsHandler := handler.NewAnalyticsHandler(analyticsSvc)
 	recurringHandler := handler.NewRecurringHandler(recurringSvc)
+	budgetHandler := handler.NewBudgetHandler(budgetSvc)
 
 	r := router.New(router.RouterConfig{
 		Env:             cfg.AppEnv,
@@ -62,6 +65,7 @@ func main() {
 		Transaction: txHandler,
 		Analytics:   analyticsHandler,
 		Recurring:   recurringHandler,
+		Budget:      budgetHandler,
 	})
 
 	log.Printf("starting server on :%s (env=%s)", cfg.AppPort, cfg.AppEnv)

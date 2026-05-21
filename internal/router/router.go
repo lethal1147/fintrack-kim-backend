@@ -16,6 +16,7 @@ type Handlers struct {
 	Transaction *handler.TransactionHandler
 	Analytics   *handler.AnalyticsHandler
 	Recurring   *handler.RecurringHandler
+	Budget      *handler.BudgetHandler
 }
 
 func New(cfg RouterConfig, h Handlers) *gin.Engine {
@@ -66,6 +67,15 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 		rec.PUT("/:id", h.Recurring.Update)
 		rec.PATCH("/:id/status", h.Recurring.ToggleStatus)
 		rec.DELETE("/:id", h.Recurring.Delete)
+	}
+
+	bud := r.Group("/budget")
+	bud.Use(middleware.Auth(cfg.JWTAccessSecret))
+	{
+		bud.GET("", h.Budget.List)
+		bud.POST("", h.Budget.Create)
+		bud.PUT("/:id", h.Budget.Update)
+		bud.DELETE("/:id", h.Budget.Delete)
 	}
 
 	if cfg.SwaggerEnabled {
