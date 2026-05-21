@@ -17,6 +17,7 @@ type Handlers struct {
 	Analytics   *handler.AnalyticsHandler
 	Recurring   *handler.RecurringHandler
 	Budget      *handler.BudgetHandler
+	Profile     *handler.ProfileHandler
 }
 
 func New(cfg RouterConfig, h Handlers) *gin.Engine {
@@ -76,6 +77,13 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 		bud.POST("", h.Budget.Create)
 		bud.PUT("/:id", h.Budget.Update)
 		bud.DELETE("/:id", h.Budget.Delete)
+	}
+
+	prof := r.Group("/profile")
+	prof.Use(middleware.Auth(cfg.JWTAccessSecret))
+	{
+		prof.PATCH("", h.Profile.Update)
+		prof.POST("/avatar", h.Profile.UploadAvatar)
 	}
 
 	if cfg.SwaggerEnabled {

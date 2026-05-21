@@ -32,6 +32,12 @@ type Config struct {
 
 	SwaggerEnabled   bool `mapstructure:"SWAGGER_ENABLED"`
 	AppCookieSecure  bool `mapstructure:"APP_COOKIE_SECURE"`
+
+	R2AccountID       string `mapstructure:"R2_ACCOUNT_ID"`
+	R2AccessKeyID     string `mapstructure:"R2_ACCESS_KEY_ID"`
+	R2SecretAccessKey string `mapstructure:"R2_SECRET_ACCESS_KEY"`
+	R2Bucket          string `mapstructure:"R2_BUCKET"`
+	R2PublicURL       string `mapstructure:"R2_PUBLIC_URL"`
 }
 
 // DSN returns the PostgreSQL connection string.
@@ -68,6 +74,11 @@ func Load() (*Config, error) {
 	v.SetDefault("FACEBOOK_CLIENT_ID", "")
 	v.SetDefault("FACEBOOK_CLIENT_SECRET", "")
 	v.SetDefault("OAUTH_REDIRECT_BASE_URL", "http://localhost:3000")
+	v.SetDefault("R2_ACCOUNT_ID", "")
+	v.SetDefault("R2_ACCESS_KEY_ID", "")
+	v.SetDefault("R2_SECRET_ACCESS_KEY", "")
+	v.SetDefault("R2_BUCKET", "")
+	v.SetDefault("R2_PUBLIC_URL", "")
 
 	// .env file (optional — ignored if not present)
 	v.SetConfigName(".env")

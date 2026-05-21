@@ -9,6 +9,7 @@ import (
 	"github.com/joakim/fintrack-api/internal/repository/postgres"
 	"github.com/joakim/fintrack-api/internal/router"
 	"github.com/joakim/fintrack-api/internal/service"
+	"github.com/joakim/fintrack-api/pkg/r2client"
 )
 
 // @title           FinTrack API
@@ -47,12 +48,16 @@ func main() {
 	recurringSvc := service.NewRecurringService(recurringRepo, txRepo)
 	budgetSvc := service.NewBudgetService(budgetRepo, txRepo)
 
+	r2 := r2client.New(cfg.R2AccountID, cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Bucket, cfg.R2PublicURL)
+	profileSvc := service.NewProfileService(userRepo, r2)
+
 	healthHandler := handler.NewHealthHandler(healthSvc)
 	authHandler := handler.NewAuthHandler(authSvc, cfg.AppCookieSecure)
 	txHandler := handler.NewTransactionHandler(txSvc)
 	analyticsHandler := handler.NewAnalyticsHandler(analyticsSvc)
 	recurringHandler := handler.NewRecurringHandler(recurringSvc)
 	budgetHandler := handler.NewBudgetHandler(budgetSvc)
+	profileHandler := handler.NewProfileHandler(profileSvc)
 
 	r := router.New(router.RouterConfig{
 		Env:             cfg.AppEnv,
@@ -66,6 +71,7 @@ func main() {
 		Analytics:   analyticsHandler,
 		Recurring:   recurringHandler,
 		Budget:      budgetHandler,
+		Profile:     profileHandler,
 	})
 
 	log.Printf("starting server on :%s (env=%s)", cfg.AppPort, cfg.AppEnv)
