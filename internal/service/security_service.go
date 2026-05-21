@@ -2,12 +2,17 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/joakim/fintrack-api/internal/domain"
+	"github.com/joakim/fintrack-api/pkg/apperror"
 	"github.com/joakim/fintrack-api/pkg/emailclient"
+	"github.com/joakim/fintrack-api/pkg/hashutil"
 )
 
 // ─── constructor ──────────────────────────────────────────────────────────────
@@ -71,14 +76,78 @@ func (s *SecurityService) RevokeSession(_ context.Context, _, sessionID string) 
 	return s.sessionRepo.DeleteByID(sessionID)
 }
 
-// ─── Password change stubs (implemented in Task 4) ───────────────────────────
+// ─── Password change ──────────────────────────────────────────────────────────
 
-func (s *SecurityService) RequestPasswordChange(_ context.Context, _ string) error {
-	return nil
+func (s *SecurityService) RequestPasswordChange(ctx context.Context, userID string) error {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return err
+	}
+
+	// Clear any stale tokens before issuing a new one
+	if err := s.otpRepo.DeleteByUserAndPurpose(userID, "password_change"); err != nil {
+		return err
+	}
+
+	code := fmt.Sprintf("%06d", rand.Intn(1_000_000))
+	codeHash, err := hashutil.Hash(code)
+	if err != nil {
+		return apperror.Internal("failed to hash OTP")
+	}
+
+	if err := s.otpRepo.Create(&domain.OTPToken{
+		UserID:    userID,
+		Purpose:   "password_change",
+		CodeHash:  codeHash,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	}); err != nil {
+		return err
+	}
+
+	html := fmt.Sprintf(
+		"<p>Your FinTrack verification code is: <strong>%s</strong></p><p>This code expires in 15 minutes.</p>",
+		code,
+	)
+	return s.emailSender.Send(ctx, user.Email, "Your FinTrack verification code", html)
 }
 
-func (s *SecurityService) ChangePassword(_ context.Context, _, _, _ string) error {
-	return nil
+func (s *SecurityService) ChangePassword(ctx context.Context, userID, otp, newPassword string) error {
+	if len(newPassword) < 8 || len(newPassword) > 100 {
+		return apperror.BadRequest("password must be between 8 and 100 characters")
+	}
+
+	token, err := s.otpRepo.FindActive(userID, "password_change")
+	if err != nil {
+		return err
+	}
+	if token == nil {
+		return apperror.BadRequest("invalid or expired code")
+	}
+
+	if err := hashutil.Verify(otp, token.CodeHash); err != nil {
+		return apperror.BadRequest("invalid or expired code")
+	}
+
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return err
+	}
+
+	newHash, err := hashutil.Hash(newPassword)
+	if err != nil {
+		return apperror.Internal("failed to hash password")
+	}
+	user.PasswordHash = newHash
+	user.UpdatedAt = time.Now()
+	if err := s.userRepo.Update(user); err != nil {
+		return err
+	}
+
+	if err := s.otpRepo.MarkUsed(token.ID); err != nil {
+		return err
+	}
+
+	return s.sessionRepo.DeleteAllByUserID(userID)
 }
 
 // ─── TOTP stubs (implemented in Task 5) ──────────────────────────────────────

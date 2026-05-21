@@ -78,6 +78,21 @@ func doSecGet(r *gin.Engine, path, token string) *httptest.ResponseRecorder {
 	return w
 }
 
+func doSecPost(r *gin.Engine, path, token string, body any) *httptest.ResponseRecorder {
+	var buf bytes.Buffer
+	if body != nil {
+		_ = json.NewEncoder(&buf).Encode(body)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, &buf)
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
 func doSecDelete(r *gin.Engine, path, token string, body any) *httptest.ResponseRecorder {
 	var buf bytes.Buffer
 	if body != nil {
@@ -130,5 +145,43 @@ func TestSecurity_RevokeSession_Unauthorized(t *testing.T) {
 	w := doSecDelete(r, "/security/sessions/sess-abc", "", nil)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+// ─── Password change tests ────────────────────────────────────────────────────
+
+func TestSecurity_RequestPasswordChange_OK(t *testing.T) {
+	r := securityRouter(&mockSecuritySvc{})
+	w := doSecPost(r, "/security/password/request", signTestToken("user1"), nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSecurity_RequestPasswordChange_Unauthorized(t *testing.T) {
+	r := securityRouter(&mockSecuritySvc{})
+	w := doSecPost(r, "/security/password/request", "", nil)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestSecurity_ChangePassword_OK(t *testing.T) {
+	r := securityRouter(&mockSecuritySvc{})
+	tok := signTestToken("user1")
+	w := doSecPost(r, "/security/password/change", tok, map[string]string{
+		"otp":          "123456",
+		"new_password": "newpassword123",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSecurity_ChangePassword_MissingBody(t *testing.T) {
+	r := securityRouter(&mockSecuritySvc{})
+	w := doSecPost(r, "/security/password/change", signTestToken("user1"), nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
 	}
 }

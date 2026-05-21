@@ -38,6 +38,12 @@ type Config struct {
 	R2SecretAccessKey string `mapstructure:"R2_SECRET_ACCESS_KEY"`
 	R2Bucket          string `mapstructure:"R2_BUCKET"`
 	R2PublicURL       string `mapstructure:"R2_PUBLIC_URL"`
+
+	SMTPHost     string `mapstructure:"SMTP_HOST"`
+	SMTPPort     int    `mapstructure:"SMTP_PORT"`
+	SMTPUsername string `mapstructure:"SMTP_USERNAME"`
+	SMTPPassword string `mapstructure:"SMTP_PASSWORD"`
+	SMTPFrom     string `mapstructure:"SMTP_FROM"`
 }
 
 // DSN returns the PostgreSQL connection string.
@@ -79,6 +85,11 @@ func Load() (*Config, error) {
 	v.SetDefault("R2_SECRET_ACCESS_KEY", "")
 	v.SetDefault("R2_BUCKET", "")
 	v.SetDefault("R2_PUBLIC_URL", "")
+	v.SetDefault("SMTP_HOST", "")
+	v.SetDefault("SMTP_PORT", 587)
+	v.SetDefault("SMTP_USERNAME", "")
+	v.SetDefault("SMTP_PASSWORD", "")
+	v.SetDefault("SMTP_FROM", "FinTrack <noreply@fintrack.app>")
 
 	// .env file (optional — ignored if not present)
 	v.SetConfigName(".env")

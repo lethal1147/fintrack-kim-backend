@@ -9,6 +9,7 @@ import (
 	"github.com/joakim/fintrack-api/internal/repository/postgres"
 	"github.com/joakim/fintrack-api/internal/router"
 	"github.com/joakim/fintrack-api/internal/service"
+	"github.com/joakim/fintrack-api/pkg/emailclient"
 	"github.com/joakim/fintrack-api/pkg/r2client"
 )
 
@@ -51,7 +52,9 @@ func main() {
 	r2 := r2client.New(cfg.R2AccountID, cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Bucket, cfg.R2PublicURL)
 	profileSvc := service.NewProfileService(userRepo, r2)
 
-	securitySvc     := service.NewSecurityService(userRepo, sessionRepo, nil, nil, nil, cfg.JWTRefreshSecret)
+	otpRepo     := postgres.NewOTPRepo(db)
+	emailSender := emailclient.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
+	securitySvc     := service.NewSecurityService(userRepo, sessionRepo, otpRepo, nil, emailSender, cfg.JWTRefreshSecret)
 	securityHandler := handler.NewSecurityHandler(securitySvc, cfg.JWTRefreshSecret, cfg.AppCookieSecure)
 
 	healthHandler := handler.NewHealthHandler(healthSvc)
