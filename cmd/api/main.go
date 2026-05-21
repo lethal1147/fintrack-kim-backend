@@ -51,6 +51,9 @@ func main() {
 	r2 := r2client.New(cfg.R2AccountID, cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Bucket, cfg.R2PublicURL)
 	profileSvc := service.NewProfileService(userRepo, r2)
 
+	securitySvc     := service.NewSecurityService(userRepo, sessionRepo, nil, nil, nil, cfg.JWTRefreshSecret)
+	securityHandler := handler.NewSecurityHandler(securitySvc, cfg.JWTRefreshSecret, cfg.AppCookieSecure)
+
 	healthHandler := handler.NewHealthHandler(healthSvc)
 	authHandler := handler.NewAuthHandler(authSvc, cfg.AppCookieSecure)
 	txHandler := handler.NewTransactionHandler(txSvc)
@@ -60,10 +63,11 @@ func main() {
 	profileHandler := handler.NewProfileHandler(profileSvc)
 
 	r := router.New(router.RouterConfig{
-		Env:             cfg.AppEnv,
-		FrontendOrigin:  cfg.AppFrontendOrigin,
-		JWTAccessSecret: cfg.JWTAccessSecret,
-		SwaggerEnabled:  cfg.SwaggerEnabled,
+		Env:              cfg.AppEnv,
+		FrontendOrigin:   cfg.AppFrontendOrigin,
+		JWTAccessSecret:  cfg.JWTAccessSecret,
+		JWTRefreshSecret: cfg.JWTRefreshSecret,
+		SwaggerEnabled:   cfg.SwaggerEnabled,
 	}, router.Handlers{
 		Health:      healthHandler,
 		Auth:        authHandler,
@@ -72,6 +76,7 @@ func main() {
 		Recurring:   recurringHandler,
 		Budget:      budgetHandler,
 		Profile:     profileHandler,
+		Security:    securityHandler,
 	})
 
 	log.Printf("starting server on :%s (env=%s)", cfg.AppPort, cfg.AppEnv)

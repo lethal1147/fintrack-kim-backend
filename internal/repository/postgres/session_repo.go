@@ -11,11 +11,12 @@ import (
 )
 
 type sessionModel struct {
-	ID           string `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-	UserID       string `gorm:"not null;index"`
-	RefreshToken string `gorm:"uniqueIndex;not null"`
+	ID           string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	UserID       string    `gorm:"not null;index"`
+	RefreshToken string    `gorm:"uniqueIndex;not null"`
 	UserAgent    string
 	IPAddress    string
+	LastActiveAt time.Time `gorm:"not null;default:now()"`
 	ExpiresAt    time.Time `gorm:"not null"`
 	CreatedAt    time.Time
 }
@@ -50,15 +51,39 @@ func (r *SessionRepo) FindByRefreshToken(token string) (*domain.Session, error) 
 		}
 		return nil, apperror.Internal(err.Error())
 	}
+	return toSessionDomain(&m), nil
+}
+
+func (r *SessionRepo) ListByUserID(userID string) ([]*domain.Session, error) {
+	var models []sessionModel
+	if err := r.db.Where("user_id = ?", userID).Order("last_active_at desc").Find(&models).Error; err != nil {
+		return nil, apperror.Internal(err.Error())
+	}
+	sessions := make([]*domain.Session, len(models))
+	for i := range models {
+		sessions[i] = toSessionDomain(&models[i])
+	}
+	return sessions, nil
+}
+
+func (r *SessionRepo) UpdateLastActive(id string, t time.Time) error {
+	if err := r.db.Model(&sessionModel{}).Where("id = ?", id).Update("last_active_at", t).Error; err != nil {
+		return apperror.Internal(err.Error())
+	}
+	return nil
+}
+
+func toSessionDomain(m *sessionModel) *domain.Session {
 	return &domain.Session{
 		ID:           m.ID,
 		UserID:       m.UserID,
 		RefreshToken: m.RefreshToken,
 		UserAgent:    m.UserAgent,
 		IPAddress:    m.IPAddress,
+		LastActiveAt: m.LastActiveAt,
 		ExpiresAt:    m.ExpiresAt,
 		CreatedAt:    m.CreatedAt,
-	}, nil
+	}
 }
 
 func (r *SessionRepo) DeleteByID(id string) error {

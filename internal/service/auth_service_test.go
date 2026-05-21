@@ -111,6 +111,9 @@ func (m *mockSessionRepo) DeleteAllByUserID(userID string) error {
 	return nil
 }
 
+func (m *mockSessionRepo) ListByUserID(_ string) ([]*domain.Session, error) { return nil, nil }
+func (m *mockSessionRepo) UpdateLastActive(_ string, _ time.Time) error      { return nil }
+
 // -- helpers --
 
 func testCfg() AuthServiceConfig {

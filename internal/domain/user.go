@@ -18,6 +18,8 @@ type User struct {
 	PasswordHash string
 	Provider     AuthProvider
 	ProviderID   string
+	TOTPSecret   string
+	TOTPEnabled  bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

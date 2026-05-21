@@ -8,6 +8,7 @@ type Session struct {
 	RefreshToken string
 	UserAgent    string
 	IPAddress    string
+	LastActiveAt time.Time
 	ExpiresAt    time.Time
 	CreatedAt    time.Time
 }
@@ -17,4 +18,6 @@ type SessionRepository interface {
 	FindByRefreshToken(token string) (*Session, error)
 	DeleteByID(id string) error
 	DeleteAllByUserID(userID string) error
+	ListByUserID(userID string) ([]*Session, error)
+	UpdateLastActive(id string, t time.Time) error
 }

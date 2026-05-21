@@ -18,6 +18,7 @@ type Handlers struct {
 	Recurring   *handler.RecurringHandler
 	Budget      *handler.BudgetHandler
 	Profile     *handler.ProfileHandler
+	Security    *handler.SecurityHandler
 }
 
 func New(cfg RouterConfig, h Handlers) *gin.Engine {
@@ -86,6 +87,18 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 		prof.POST("/avatar", h.Profile.UploadAvatar)
 	}
 
+	sec := r.Group("/security")
+	sec.Use(middleware.Auth(cfg.JWTAccessSecret))
+	{
+		sec.GET("/sessions",          h.Security.ListSessions)
+		sec.DELETE("/sessions/:id",   h.Security.RevokeSession)
+		sec.POST("/password/request", h.Security.RequestPasswordChange)
+		sec.POST("/password/change",  h.Security.ChangePassword)
+		sec.POST("/totp/setup",       h.Security.SetupTOTP)
+		sec.POST("/totp/confirm",     h.Security.ConfirmTOTP)
+		sec.DELETE("/totp",           h.Security.DisableTOTP)
+	}
+
 	if cfg.SwaggerEnabled {
 		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	}
@@ -94,8 +107,9 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 }
 
 type RouterConfig struct {
-	Env             string
-	FrontendOrigin  string
-	JWTAccessSecret string
-	SwaggerEnabled  bool
+	Env              string
+	FrontendOrigin   string
+	JWTAccessSecret  string
+	JWTRefreshSecret string
+	SwaggerEnabled   bool
 }
