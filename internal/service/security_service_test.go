@@ -6,8 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pquerna/otp/totp"
+
 	"github.com/joakim/fintrack-api/internal/domain"
 	"github.com/joakim/fintrack-api/pkg/hashutil"
+	"github.com/joakim/fintrack-api/pkg/totputil"
 )
 
 // ─── mock session repo ────────────────────────────────────────────────────────
@@ -254,5 +257,154 @@ func TestSecurity_ChangePassword_ShortPassword(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "8") {
 		t.Errorf("expected '8' in error message, got %q", err.Error())
+	}
+}
+
+// ─── mock TOTP repo ───────────────────────────────────────────────────────────
+
+type mockTOTPRepo struct {
+	backupCodes    []*domain.TOTPBackupCode
+	createdCodes   []*domain.TOTPBackupCode
+	markedUsedID   string
+	deletedUserID  string
+}
+
+func (m *mockTOTPRepo) CreateBackupCodes(codes []*domain.TOTPBackupCode) error {
+	m.createdCodes = codes
+	return nil
+}
+func (m *mockTOTPRepo) FindUnusedBackupCodes(_ string) ([]*domain.TOTPBackupCode, error) {
+	return m.backupCodes, nil
+}
+func (m *mockTOTPRepo) MarkBackupCodeUsed(id string) error {
+	m.markedUsedID = id
+	return nil
+}
+func (m *mockTOTPRepo) DeleteBackupCodes(userID string) error {
+	m.deletedUserID = userID
+	return nil
+}
+
+// ─── TestSecurity_SetupTOTP_GeneratesSecret ───────────────────────────────────
+
+func TestSecurity_SetupTOTP_GeneratesSecret(t *testing.T) {
+	user := &domain.User{ID: "u1", Email: "user@example.com", TOTPEnabled: false}
+	userRepo := &mockSecUserRepo{user: user}
+	svc := NewSecurityService(userRepo, &mockSecSessionRepo{}, nil, nil, nil, "secret")
+
+	result, err := svc.SetupTOTP(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Secret == "" {
+		t.Error("expected non-empty secret")
+	}
+	if result.QRCodeURI == "" {
+		t.Error("expected non-empty QR code URI")
+	}
+	if userRepo.updated == nil || userRepo.updated.TOTPSecret == "" {
+		t.Error("expected user TOTPSecret to be saved")
+	}
+}
+
+// ─── TestSecurity_SetupTOTP_AlreadyEnabled ────────────────────────────────────
+
+func TestSecurity_SetupTOTP_AlreadyEnabled(t *testing.T) {
+	user := &domain.User{ID: "u1", Email: "user@example.com", TOTPEnabled: true}
+	svc := NewSecurityService(&mockSecUserRepo{user: user}, &mockSecSessionRepo{}, nil, nil, nil, "secret")
+
+	_, err := svc.SetupTOTP(context.Background(), "u1")
+	if err == nil {
+		t.Fatal("expected error when TOTP already enabled")
+	}
+}
+
+// ─── TestSecurity_ConfirmTOTP_OK ──────────────────────────────────────────────
+
+func TestSecurity_ConfirmTOTP_OK(t *testing.T) {
+	secret, _ := totputil.GenerateSecret()
+	user := &domain.User{ID: "u1", Email: "user@example.com", TOTPSecret: secret, TOTPEnabled: false}
+	userRepo := &mockSecUserRepo{user: user}
+	totpRepo := &mockTOTPRepo{}
+	svc := NewSecurityService(userRepo, &mockSecSessionRepo{}, nil, totpRepo, nil, "secret")
+
+	code, _ := totp.GenerateCode(secret, time.Now())
+	plainCodes, err := svc.ConfirmTOTP(context.Background(), "u1", code)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(plainCodes) != 8 {
+		t.Errorf("expected 8 backup codes, got %d", len(plainCodes))
+	}
+	if len(totpRepo.createdCodes) != 8 {
+		t.Errorf("expected 8 codes persisted, got %d", len(totpRepo.createdCodes))
+	}
+	if !userRepo.updated.TOTPEnabled {
+		t.Error("expected TOTPEnabled=true after confirm")
+	}
+}
+
+// ─── TestSecurity_ConfirmTOTP_InvalidCode ─────────────────────────────────────
+
+func TestSecurity_ConfirmTOTP_InvalidCode(t *testing.T) {
+	secret, _ := totputil.GenerateSecret()
+	user := &domain.User{ID: "u1", Email: "user@example.com", TOTPSecret: secret, TOTPEnabled: false}
+	svc := NewSecurityService(&mockSecUserRepo{user: user}, &mockSecSessionRepo{}, nil, &mockTOTPRepo{}, nil, "secret")
+
+	_, err := svc.ConfirmTOTP(context.Background(), "u1", "000000")
+	if err == nil {
+		t.Fatal("expected error for invalid TOTP code")
+	}
+}
+
+// ─── TestSecurity_DisableTOTP_WithTOTPCode ────────────────────────────────────
+
+func TestSecurity_DisableTOTP_WithTOTPCode(t *testing.T) {
+	secret, _ := totputil.GenerateSecret()
+	user := &domain.User{ID: "u1", Email: "user@example.com", TOTPSecret: secret, TOTPEnabled: true}
+	userRepo := &mockSecUserRepo{user: user}
+	totpRepo := &mockTOTPRepo{}
+	svc := NewSecurityService(userRepo, &mockSecSessionRepo{}, nil, totpRepo, nil, "secret")
+
+	code, _ := totp.GenerateCode(secret, time.Now())
+	if err := svc.DisableTOTP(context.Background(), "u1", code); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if userRepo.updated.TOTPEnabled {
+		t.Error("expected TOTPEnabled=false after disable")
+	}
+	if totpRepo.deletedUserID != "u1" {
+		t.Errorf("expected backup codes deleted for u1, got %q", totpRepo.deletedUserID)
+	}
+}
+
+// ─── TestSecurity_DisableTOTP_WithBackupCode ──────────────────────────────────
+
+func TestSecurity_DisableTOTP_WithBackupCode(t *testing.T) {
+	backupCode := "ABCDE-FGHIJ"
+	hash, _ := hashutil.Hash(backupCode)
+	user := &domain.User{ID: "u1", Email: "user@example.com", TOTPSecret: "SECRET", TOTPEnabled: true}
+	userRepo := &mockSecUserRepo{user: user}
+	totpRepo := &mockTOTPRepo{backupCodes: []*domain.TOTPBackupCode{{ID: "bc1", CodeHash: hash}}}
+	svc := NewSecurityService(userRepo, &mockSecSessionRepo{}, nil, totpRepo, nil, "secret")
+
+	if err := svc.DisableTOTP(context.Background(), "u1", backupCode); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if totpRepo.markedUsedID != "bc1" {
+		t.Errorf("expected backup code bc1 marked used, got %q", totpRepo.markedUsedID)
+	}
+}
+
+// ─── TestSecurity_DisableTOTP_InvalidCode ─────────────────────────────────────
+
+func TestSecurity_DisableTOTP_InvalidCode(t *testing.T) {
+	user := &domain.User{ID: "u1", Email: "user@example.com", TOTPSecret: "SECRET", TOTPEnabled: true}
+	totpRepo := &mockTOTPRepo{backupCodes: []*domain.TOTPBackupCode{}}
+	svc := NewSecurityService(&mockSecUserRepo{user: user}, &mockSecSessionRepo{}, nil, totpRepo, nil, "secret")
+
+	err := svc.DisableTOTP(context.Background(), "u1", "wrongcode")
+	if err == nil {
+		t.Fatal("expected error for invalid code")
 	}
 }

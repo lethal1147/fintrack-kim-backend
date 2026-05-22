@@ -13,6 +13,7 @@ import (
 	"github.com/joakim/fintrack-api/pkg/apperror"
 	"github.com/joakim/fintrack-api/pkg/emailclient"
 	"github.com/joakim/fintrack-api/pkg/hashutil"
+	"github.com/joakim/fintrack-api/pkg/totputil"
 )
 
 // ─── constructor ──────────────────────────────────────────────────────────────
@@ -150,18 +151,110 @@ func (s *SecurityService) ChangePassword(ctx context.Context, userID, otp, newPa
 	return s.sessionRepo.DeleteAllByUserID(userID)
 }
 
-// ─── TOTP stubs (implemented in Task 5) ──────────────────────────────────────
+// ─── TOTP ─────────────────────────────────────────────────────────────────────
 
-func (s *SecurityService) SetupTOTP(_ context.Context, _ string) (*domain.TOTPSetupResult, error) {
-	return nil, nil
+func (s *SecurityService) SetupTOTP(_ context.Context, userID string) (*domain.TOTPSetupResult, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if user.TOTPEnabled {
+		return nil, apperror.BadRequest("2FA is already enabled")
+	}
+
+	secret, err := totputil.GenerateSecret()
+	if err != nil {
+		return nil, apperror.Internal("failed to generate TOTP secret")
+	}
+
+	user.TOTPSecret = secret
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, err
+	}
+
+	return &domain.TOTPSetupResult{
+		Secret:    secret,
+		QRCodeURI: totputil.QRCodeURI(secret, user.Email, "FinTrack"),
+	}, nil
 }
 
-func (s *SecurityService) ConfirmTOTP(_ context.Context, _, _ string) ([]string, error) {
-	return nil, nil
+func (s *SecurityService) ConfirmTOTP(_ context.Context, userID, code string) ([]string, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if user.TOTPSecret == "" || user.TOTPEnabled {
+		return nil, apperror.BadRequest("TOTP setup not initiated or already enabled")
+	}
+
+	if !totputil.Validate(user.TOTPSecret, code) {
+		return nil, apperror.BadRequest("invalid code")
+	}
+
+	plainCodes, err := totputil.GenerateBackupCodes()
+	if err != nil {
+		return nil, apperror.Internal("failed to generate backup codes")
+	}
+
+	backupCodes := make([]*domain.TOTPBackupCode, len(plainCodes))
+	for i, c := range plainCodes {
+		hash, err := hashutil.Hash(c)
+		if err != nil {
+			return nil, apperror.Internal("failed to hash backup code")
+		}
+		backupCodes[i] = &domain.TOTPBackupCode{UserID: userID, CodeHash: hash}
+	}
+	if err := s.totpRepo.CreateBackupCodes(backupCodes); err != nil {
+		return nil, err
+	}
+
+	user.TOTPEnabled = true
+	user.UpdatedAt = time.Now()
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, err
+	}
+
+	return plainCodes, nil
 }
 
-func (s *SecurityService) DisableTOTP(_ context.Context, _, _ string) error {
-	return nil
+func (s *SecurityService) DisableTOTP(_ context.Context, userID, code string) error {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return err
+	}
+	if !user.TOTPEnabled {
+		return apperror.BadRequest("2FA is not enabled")
+	}
+
+	if totputil.Validate(user.TOTPSecret, code) {
+		return s.disableTOTPForUser(user)
+	}
+
+	// Try backup codes.
+	backupCodes, err := s.totpRepo.FindUnusedBackupCodes(userID)
+	if err != nil {
+		return err
+	}
+	for _, bc := range backupCodes {
+		if hashutil.Verify(code, bc.CodeHash) == nil {
+			if err := s.totpRepo.MarkBackupCodeUsed(bc.ID); err != nil {
+				return err
+			}
+			return s.disableTOTPForUser(user)
+		}
+	}
+
+	return apperror.BadRequest("invalid code")
+}
+
+func (s *SecurityService) disableTOTPForUser(user *domain.User) error {
+	user.TOTPEnabled = false
+	user.TOTPSecret = ""
+	user.UpdatedAt = time.Now()
+	if err := s.userRepo.Update(user); err != nil {
+		return err
+	}
+	return s.totpRepo.DeleteBackupCodes(user.ID)
 }
 
 // ─── User-agent parsing ───────────────────────────────────────────────────────

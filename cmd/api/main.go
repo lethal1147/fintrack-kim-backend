@@ -31,14 +31,17 @@ func main() {
 
 	sqlDB, _ := db.DB()
 
-	userRepo := postgres.NewUserRepo(db)
+	userRepo    := postgres.NewUserRepo(db)
 	sessionRepo := postgres.NewSessionRepo(db)
-	txRepo := postgres.NewTransactionRepo(db)
+	txRepo      := postgres.NewTransactionRepo(db)
 	recurringRepo := postgres.NewRecurringRepo(db)
-	budgetRepo := postgres.NewBudgetRepo(db)
+	budgetRepo  := postgres.NewBudgetRepo(db)
+	otpRepo     := postgres.NewOTPRepo(db)
+	totpRepo    := postgres.NewTOTPRepo(db)
+	emailSender := emailclient.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
 
 	healthSvc := service.NewHealthService("0.1.0", sqlDB)
-	authSvc := service.NewAuthService(userRepo, sessionRepo, service.AuthServiceConfig{
+	authSvc := service.NewAuthService(userRepo, sessionRepo, totpRepo, service.AuthServiceConfig{
 		AccessSecret:        cfg.JWTAccessSecret,
 		RefreshSecret:       cfg.JWTRefreshSecret,
 		AccessExpiryMinutes: cfg.JWTAccessExpiryMinutes,
@@ -51,10 +54,7 @@ func main() {
 
 	r2 := r2client.New(cfg.R2AccountID, cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Bucket, cfg.R2PublicURL)
 	profileSvc := service.NewProfileService(userRepo, r2)
-
-	otpRepo     := postgres.NewOTPRepo(db)
-	emailSender := emailclient.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
-	securitySvc     := service.NewSecurityService(userRepo, sessionRepo, otpRepo, nil, emailSender, cfg.JWTRefreshSecret)
+	securitySvc     := service.NewSecurityService(userRepo, sessionRepo, otpRepo, totpRepo, emailSender, cfg.JWTRefreshSecret)
 	securityHandler := handler.NewSecurityHandler(securitySvc, cfg.JWTRefreshSecret, cfg.AppCookieSecure)
 
 	healthHandler := handler.NewHealthHandler(healthSvc)

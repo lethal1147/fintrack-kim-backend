@@ -36,7 +36,7 @@ type TOTPBackupCode struct {
 
 type TOTPRepository interface {
 	CreateBackupCodes(codes []*TOTPBackupCode) error
-	FindUnusedBackupCode(userID, codeHash string) (*TOTPBackupCode, error)
+	FindUnusedBackupCodes(userID string) ([]*TOTPBackupCode, error)
 	MarkBackupCodeUsed(id string) error
 	DeleteBackupCodes(userID string) error
 }

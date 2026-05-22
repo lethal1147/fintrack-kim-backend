@@ -18,21 +18,23 @@ import (
 // -- mock AuthService --
 
 type mockAuthSvc struct {
-	registerResp *service.AuthResponse
-	registerErr  error
-	loginResp    *service.AuthResponse
-	loginErr     error
-	refreshResp  *service.RefreshResponse
-	refreshErr   error
-	logoutErr    error
-	profileResp  *service.UserInfo
-	profileErr   error
+	registerResp   *service.AuthResponse
+	registerErr    error
+	loginResp      *service.LoginResult
+	loginErr       error
+	refreshResp    *service.RefreshResponse
+	refreshErr     error
+	logoutErr      error
+	profileResp    *service.UserInfo
+	profileErr     error
+	verifyTOTPResp *service.AuthResponse
+	verifyTOTPErr  error
 }
 
 func (m *mockAuthSvc) Register(_ service.AuthInput) (*service.AuthResponse, error) {
 	return m.registerResp, m.registerErr
 }
-func (m *mockAuthSvc) Login(_ service.LoginInput) (*service.AuthResponse, error) {
+func (m *mockAuthSvc) Login(_ service.LoginInput) (*service.LoginResult, error) {
 	return m.loginResp, m.loginErr
 }
 func (m *mockAuthSvc) Refresh(_ string) (*service.RefreshResponse, error) {
@@ -42,6 +44,9 @@ func (m *mockAuthSvc) Logout(_ string) error   { return m.logoutErr }
 func (m *mockAuthSvc) LogoutAll(_ string) error { return m.logoutErr }
 func (m *mockAuthSvc) GetProfile(_ string) (*service.UserInfo, error) {
 	return m.profileResp, m.profileErr
+}
+func (m *mockAuthSvc) VerifyTOTP(_, _, _, _ string) (*service.AuthResponse, error) {
+	return m.verifyTOTPResp, m.verifyTOTPErr
 }
 
 // -- helpers --
@@ -64,6 +69,7 @@ func authRouter(svc service.AuthServiceInterface) *gin.Engine {
 	{
 		auth.POST("/register", h.Register)
 		auth.POST("/login", h.Login)
+		auth.POST("/totp-verify", h.VerifyTOTP)
 		auth.POST("/refresh", h.Refresh)
 		auth.POST("/logout", h.Logout) // public — no auth required
 		protected := auth.Group("")
@@ -194,10 +200,10 @@ func TestRegisterHandler_Conflict(t *testing.T) {
 // -- Login --
 
 func TestLoginHandler_Success(t *testing.T) {
-	svc := &mockAuthSvc{loginResp: &service.AuthResponse{
+	svc := &mockAuthSvc{loginResp: &service.LoginResult{Auth: &service.AuthResponse{
 		AccessToken: "access-tok", RefreshToken: "refresh-tok",
 		User: service.UserInfo{ID: "u1", Email: "bob@example.com", Name: "Bob"},
-	}}
+	}}}
 	w := doPost(authRouter(svc), "/auth/login",
 		`{"email":"bob@example.com","password":"password123"}`)
 
@@ -217,10 +223,10 @@ func TestLoginHandler_Success(t *testing.T) {
 }
 
 func TestLoginHandler_SetsCookie(t *testing.T) {
-	svc := &mockAuthSvc{loginResp: &service.AuthResponse{
+	svc := &mockAuthSvc{loginResp: &service.LoginResult{Auth: &service.AuthResponse{
 		AccessToken: "access-tok", RefreshToken: "refresh-tok",
 		User: service.UserInfo{ID: "u1", Email: "b@c.com", Name: "B"},
-	}}
+	}}}
 	w := doPost(authRouter(svc), "/auth/login",
 		`{"email":"b@c.com","password":"password123"}`)
 
@@ -381,5 +387,65 @@ func TestMeHandler_ProfileNotFound(t *testing.T) {
 	w := doGet(authRouter(svc), "/auth/me", tok)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("want 404, got %d", w.Code)
+	}
+}
+
+// ─── Login TOTP challenge ─────────────────────────────────────────────────────
+
+func TestLoginHandler_ReturnsTOTPChallenge(t *testing.T) {
+	svc := &mockAuthSvc{loginResp: &service.LoginResult{Challenge: &service.TOTPChallengeResponse{
+		TOTPRequired:   true,
+		ChallengeToken: "challenge-tok",
+	}}}
+	w := doPost(authRouter(svc), "/auth/login", `{"email":"a@b.com","password":"pw"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	// Must NOT set a refresh cookie when TOTP is required.
+	if cookie := getRefreshCookie(w); cookie != nil && cookie.MaxAge >= 0 {
+		t.Error("must not set refresh cookie when TOTP challenge is returned")
+	}
+	var body struct {
+		Data struct {
+			TOTPRequired   bool   `json:"totp_required"`
+			ChallengeToken string `json:"challenge_token"`
+		} `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if !body.Data.TOTPRequired || body.Data.ChallengeToken == "" {
+		t.Error("expected totp_required=true and non-empty challenge_token")
+	}
+}
+
+// ─── VerifyTOTP handler ───────────────────────────────────────────────────────
+
+func TestVerifyTOTPHandler_OK(t *testing.T) {
+	svc := &mockAuthSvc{verifyTOTPResp: &service.AuthResponse{
+		AccessToken: "access-tok", RefreshToken: "refresh-tok",
+		User: service.UserInfo{ID: "u1", Email: "a@b.com"},
+	}}
+	w := doPost(authRouter(svc), "/auth/totp-verify",
+		`{"challenge_token":"ch-tok","code":"123456"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if cookie := getRefreshCookie(w); cookie == nil || cookie.Value == "" {
+		t.Error("expected refresh cookie to be set on successful TOTP verify")
+	}
+}
+
+func TestVerifyTOTPHandler_InvalidCode(t *testing.T) {
+	svc := &mockAuthSvc{verifyTOTPErr: apperror.Unauthorized("invalid code")}
+	w := doPost(authRouter(svc), "/auth/totp-verify",
+		`{"challenge_token":"ch-tok","code":"000000"}`)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d", w.Code)
+	}
+}
+
+func TestVerifyTOTPHandler_MissingBody(t *testing.T) {
+	w := doPost(authRouter(&mockAuthSvc{}), "/auth/totp-verify", `{}`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", w.Code)
 	}
 }

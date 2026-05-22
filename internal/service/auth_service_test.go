@@ -7,6 +7,7 @@ import (
 
 	"github.com/joakim/fintrack-api/internal/domain"
 	"github.com/joakim/fintrack-api/pkg/apperror"
+	"github.com/joakim/fintrack-api/pkg/jwtutil"
 )
 
 // -- mock UserRepository --
@@ -130,7 +131,7 @@ func testCfg() AuthServiceConfig {
 func TestRegister_Success(t *testing.T) {
 	userRepo := newMockUserRepo()
 	sessionRepo := newMockSessionRepo()
-	svc := NewAuthService(userRepo, sessionRepo, testCfg())
+	svc := NewAuthService(userRepo, sessionRepo, nil, testCfg())
 
 	resp, err := svc.Register(AuthInput{
 		Email: "alice@example.com", Password: "password123", Name: "Alice",
@@ -154,7 +155,7 @@ func TestRegister_Success(t *testing.T) {
 
 func TestRegister_DuplicateEmail(t *testing.T) {
 	userRepo := newMockUserRepo()
-	svc := NewAuthService(userRepo, newMockSessionRepo(), testCfg())
+	svc := NewAuthService(userRepo, newMockSessionRepo(), nil, testCfg())
 
 	userRepo.byEmail["alice@example.com"] = &domain.User{
 		ID: "existing", Email: "alice@example.com",
@@ -177,7 +178,7 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 func TestLogin_Success(t *testing.T) {
 	userRepo := newMockUserRepo()
 	sessionRepo := newMockSessionRepo()
-	svc := NewAuthService(userRepo, sessionRepo, testCfg())
+	svc := NewAuthService(userRepo, sessionRepo, nil, testCfg())
 
 	if _, err := svc.Register(AuthInput{
 		Email: "bob@example.com", Password: "password123", Name: "Bob",
@@ -192,16 +193,19 @@ func TestLogin_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
-	if resp.AccessToken == "" || resp.RefreshToken == "" {
+	if resp.Auth == nil {
+		t.Fatal("expected Auth result, got nil (TOTP challenge unexpected)")
+	}
+	if resp.Auth.AccessToken == "" || resp.Auth.RefreshToken == "" {
 		t.Error("token pair must be non-empty")
 	}
-	if resp.User.Email != "bob@example.com" {
-		t.Errorf("want email=bob@example.com, got %s", resp.User.Email)
+	if resp.Auth.User.Email != "bob@example.com" {
+		t.Errorf("want email=bob@example.com, got %s", resp.Auth.User.Email)
 	}
 }
 
 func TestLogin_WrongEmail(t *testing.T) {
-	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), testCfg())
+	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), nil, testCfg())
 
 	_, err := svc.Login(LoginInput{Email: "nobody@example.com", Password: "pw"})
 	if err == nil {
@@ -215,7 +219,7 @@ func TestLogin_WrongEmail(t *testing.T) {
 
 func TestLogin_WrongPassword(t *testing.T) {
 	userRepo := newMockUserRepo()
-	svc := NewAuthService(userRepo, newMockSessionRepo(), testCfg())
+	svc := NewAuthService(userRepo, newMockSessionRepo(), nil, testCfg())
 
 	svc.Register(AuthInput{Email: "carol@example.com", Password: "correct-pw!", Name: "Carol"})
 
@@ -234,7 +238,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 func TestRefresh_Success(t *testing.T) {
 	userRepo := newMockUserRepo()
 	sessionRepo := newMockSessionRepo()
-	svc := NewAuthService(userRepo, sessionRepo, testCfg())
+	svc := NewAuthService(userRepo, sessionRepo, nil, testCfg())
 
 	resp, err := svc.Register(AuthInput{
 		Email: "dave@example.com", Password: "password123", Name: "Dave",
@@ -253,7 +257,7 @@ func TestRefresh_Success(t *testing.T) {
 }
 
 func TestRefresh_NotInDB(t *testing.T) {
-	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), testCfg())
+	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), nil, testCfg())
 
 	_, err := svc.Refresh("totally-fake-token")
 	if err == nil {
@@ -264,7 +268,7 @@ func TestRefresh_NotInDB(t *testing.T) {
 func TestRefresh_ExpiredToken(t *testing.T) {
 	userRepo := newMockUserRepo()
 	sessionRepo := newMockSessionRepo()
-	svc := NewAuthService(userRepo, sessionRepo, testCfg())
+	svc := NewAuthService(userRepo, sessionRepo, nil, testCfg())
 
 	svc.Register(AuthInput{Email: "eve@example.com", Password: "password123", Name: "Eve"})
 	user := userRepo.byEmail["eve@example.com"]
@@ -289,7 +293,7 @@ func TestRefresh_ExpiredToken(t *testing.T) {
 func TestLogout_Success(t *testing.T) {
 	userRepo := newMockUserRepo()
 	sessionRepo := newMockSessionRepo()
-	svc := NewAuthService(userRepo, sessionRepo, testCfg())
+	svc := NewAuthService(userRepo, sessionRepo, nil, testCfg())
 
 	resp, err := svc.Register(AuthInput{
 		Email: "frank@example.com", Password: "password123", Name: "Frank",
@@ -307,7 +311,7 @@ func TestLogout_Success(t *testing.T) {
 }
 
 func TestLogout_NotFound_IsIdempotent(t *testing.T) {
-	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), testCfg())
+	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), nil, testCfg())
 
 	if err := svc.Logout("nonexistent-token"); err != nil {
 		t.Errorf("Logout of missing token should be idempotent, got: %v", err)
@@ -319,7 +323,7 @@ func TestLogout_NotFound_IsIdempotent(t *testing.T) {
 func TestLogoutAll_Success(t *testing.T) {
 	userRepo := newMockUserRepo()
 	sessionRepo := newMockSessionRepo()
-	svc := NewAuthService(userRepo, sessionRepo, testCfg())
+	svc := NewAuthService(userRepo, sessionRepo, nil, testCfg())
 
 	svc.Register(AuthInput{Email: "grace@example.com", Password: "pw12345678", Name: "Grace"})
 	user := userRepo.byEmail["grace@example.com"]
@@ -339,7 +343,7 @@ func TestLogoutAll_Success(t *testing.T) {
 
 func TestGetProfile_Success(t *testing.T) {
 	userRepo := newMockUserRepo()
-	svc := NewAuthService(userRepo, newMockSessionRepo(), testCfg())
+	svc := NewAuthService(userRepo, newMockSessionRepo(), nil, testCfg())
 
 	svc.Register(AuthInput{Email: "henry@example.com", Password: "password123", Name: "Henry"})
 	user := userRepo.byEmail["henry@example.com"]
@@ -357,7 +361,7 @@ func TestGetProfile_Success(t *testing.T) {
 }
 
 func TestGetProfile_NotFound(t *testing.T) {
-	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), testCfg())
+	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), nil, testCfg())
 
 	_, err := svc.GetProfile("nonexistent-id")
 	if err == nil {
@@ -372,7 +376,7 @@ func TestGetProfile_NotFound(t *testing.T) {
 // -- Error path coverage --
 
 func TestRegister_PasswordTooLong(t *testing.T) {
-	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), testCfg())
+	svc := NewAuthService(newMockUserRepo(), newMockSessionRepo(), nil, testCfg())
 	longPw := strings.Repeat("a", 73) // bcrypt rejects passwords > 72 bytes
 	_, err := svc.Register(AuthInput{
 		Email: "long@example.com", Password: longPw, Name: "Long",
@@ -385,7 +389,7 @@ func TestRegister_PasswordTooLong(t *testing.T) {
 func TestRegister_CreateUserFails(t *testing.T) {
 	userRepo := newMockUserRepo()
 	userRepo.createErr = apperror.Internal("db unavailable")
-	svc := NewAuthService(userRepo, newMockSessionRepo(), testCfg())
+	svc := NewAuthService(userRepo, newMockSessionRepo(), nil, testCfg())
 
 	_, err := svc.Register(AuthInput{
 		Email: "fail@example.com", Password: "password123", Name: "Fail",
@@ -398,7 +402,7 @@ func TestRegister_CreateUserFails(t *testing.T) {
 func TestLogin_SessionCreateFails(t *testing.T) {
 	userRepo := newMockUserRepo()
 	sessionRepo := newMockSessionRepo()
-	svc := NewAuthService(userRepo, sessionRepo, testCfg())
+	svc := NewAuthService(userRepo, sessionRepo, nil, testCfg())
 
 	// Register succeeds (session created for register)
 	if _, err := svc.Register(AuthInput{
@@ -413,5 +417,71 @@ func TestLogin_SessionCreateFails(t *testing.T) {
 	_, err := svc.Login(LoginInput{Email: "ivy@example.com", Password: "password123"})
 	if err == nil {
 		t.Fatal("expected error when session repo Create fails during Login")
+	}
+}
+
+// ─── TOTP login gate ──────────────────────────────────────────────────────────
+
+type mockAuthTOTPRepo struct {
+	backupCodes  []*domain.TOTPBackupCode
+	markedUsedID string
+}
+
+func (m *mockAuthTOTPRepo) CreateBackupCodes(_ []*domain.TOTPBackupCode) error { return nil }
+func (m *mockAuthTOTPRepo) FindUnusedBackupCodes(_ string) ([]*domain.TOTPBackupCode, error) {
+	return m.backupCodes, nil
+}
+func (m *mockAuthTOTPRepo) MarkBackupCodeUsed(id string) error {
+	m.markedUsedID = id
+	return nil
+}
+func (m *mockAuthTOTPRepo) DeleteBackupCodes(_ string) error { return nil }
+
+func TestAuth_Login_ReturnsChallengeWhenTOTPEnabled(t *testing.T) {
+	userRepo := newMockUserRepo()
+	svc := NewAuthService(userRepo, newMockSessionRepo(), nil, testCfg())
+
+	if _, err := svc.Register(AuthInput{
+		Email: "totp@example.com", Password: "password123", Name: "TOTP",
+	}); err != nil {
+		t.Fatalf("setup register: %v", err)
+	}
+	u, _ := userRepo.FindByEmail("totp@example.com")
+	u.TOTPEnabled = true
+	u.TOTPSecret = "JBSWY3DPEHPK3PXP"
+	userRepo.byEmail[u.Email] = u
+	userRepo.byID[u.ID] = u
+
+	result, err := svc.Login(LoginInput{Email: "totp@example.com", Password: "password123"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Challenge == nil {
+		t.Fatal("expected TOTP challenge, got nil")
+	}
+	if result.Auth != nil {
+		t.Error("expected Auth to be nil when challenge returned")
+	}
+	if result.Challenge.ChallengeToken == "" {
+		t.Error("expected non-empty challenge token")
+	}
+}
+
+func TestAuth_VerifyTOTP_InvalidCode(t *testing.T) {
+	userRepo := newMockUserRepo()
+	totpRepo := &mockAuthTOTPRepo{backupCodes: []*domain.TOTPBackupCode{}}
+	svc := NewAuthService(userRepo, newMockSessionRepo(), totpRepo, testCfg())
+
+	challengeToken, err := jwtutil.SignChallengeToken("u-test", "totp_challenge", testCfg().AccessSecret, 5)
+	if err != nil {
+		t.Fatalf("sign challenge: %v", err)
+	}
+	userRepo.byID["u-test"] = &domain.User{
+		ID: "u-test", Email: "t@example.com", TOTPEnabled: true, TOTPSecret: "JBSWY3DPEHPK3PXP",
+	}
+
+	_, err = svc.VerifyTOTP(challengeToken, "000000", "", "")
+	if err == nil {
+		t.Fatal("expected error for invalid TOTP code")
 	}
 }

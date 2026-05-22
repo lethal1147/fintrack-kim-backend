@@ -11,12 +11,13 @@ import (
 
 type stubAuthSvc struct{}
 
-func (s *stubAuthSvc) Register(_ service.AuthInput) (*service.AuthResponse, error)    { return nil, nil }
-func (s *stubAuthSvc) Login(_ service.LoginInput) (*service.AuthResponse, error)      { return nil, nil }
-func (s *stubAuthSvc) Refresh(_ string) (*service.RefreshResponse, error)             { return nil, nil }
-func (s *stubAuthSvc) Logout(_ string) error                                          { return nil }
-func (s *stubAuthSvc) LogoutAll(_ string) error                                       { return nil }
-func (s *stubAuthSvc) GetProfile(_ string) (*service.UserInfo, error)                 { return nil, nil }
+func (s *stubAuthSvc) Register(_ service.AuthInput) (*service.AuthResponse, error)         { return nil, nil }
+func (s *stubAuthSvc) Login(_ service.LoginInput) (*service.LoginResult, error)            { return nil, nil }
+func (s *stubAuthSvc) Refresh(_ string) (*service.RefreshResponse, error)                  { return nil, nil }
+func (s *stubAuthSvc) Logout(_ string) error                                               { return nil }
+func (s *stubAuthSvc) LogoutAll(_ string) error                                            { return nil }
+func (s *stubAuthSvc) GetProfile(_ string) (*service.UserInfo, error)                      { return nil, nil }
+func (s *stubAuthSvc) VerifyTOTP(_, _, _, _ string) (*service.AuthResponse, error)         { return nil, nil }
 
 type stubTxSvc struct{}
 

@@ -8,6 +8,7 @@ import (
 	"github.com/joakim/fintrack-api/pkg/apperror"
 	"github.com/joakim/fintrack-api/pkg/hashutil"
 	"github.com/joakim/fintrack-api/pkg/jwtutil"
+	"github.com/joakim/fintrack-api/pkg/totputil"
 )
 
 // AuthServiceConfig holds the JWT secrets and expiry durations for auth operations.
@@ -21,11 +22,12 @@ type AuthServiceConfig struct {
 // AuthServiceInterface is the contract that the handler layer depends on.
 type AuthServiceInterface interface {
 	Register(input AuthInput) (*AuthResponse, error)
-	Login(input LoginInput) (*AuthResponse, error)
+	Login(input LoginInput) (*LoginResult, error)
 	Refresh(refreshToken string) (*RefreshResponse, error)
 	Logout(refreshToken string) error
 	LogoutAll(userID string) error
 	GetProfile(userID string) (*UserInfo, error)
+	VerifyTOTP(challengeToken, code, userAgent, ipAddress string) (*AuthResponse, error)
 }
 
 // AuthInput is the payload for Register.
@@ -45,19 +47,33 @@ type LoginInput struct {
 
 // UserInfo is the safe public representation of a user.
 type UserInfo struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
-	AvatarURL string    `json:"avatar_url"`
-	Provider  string    `json:"provider"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string    `json:"id"`
+	Email       string    `json:"email"`
+	Name        string    `json:"name"`
+	AvatarURL   string    `json:"avatar_url"`
+	Provider    string    `json:"provider"`
+	TOTPEnabled bool      `json:"totp_enabled"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
-// AuthResponse is returned by Register and Login.
+// AuthResponse is returned by Register and successful Login.
 type AuthResponse struct {
 	AccessToken  string   `json:"access_token"`
 	RefreshToken string   `json:"refresh_token"`
 	User         UserInfo `json:"user"`
+}
+
+// TOTPChallengeResponse is returned by Login when the user has TOTP enabled.
+type TOTPChallengeResponse struct {
+	TOTPRequired   bool   `json:"totp_required"`
+	ChallengeToken string `json:"challenge_token"`
+}
+
+// LoginResult wraps either a full auth response or a TOTP challenge.
+// Exactly one field is non-nil.
+type LoginResult struct {
+	Auth      *AuthResponse
+	Challenge *TOTPChallengeResponse
 }
 
 // RefreshResponse is returned by Refresh.
@@ -69,6 +85,7 @@ type RefreshResponse struct {
 type AuthService struct {
 	userRepo    domain.UserRepository
 	sessionRepo domain.SessionRepository
+	totpRepo    domain.TOTPRepository
 	cfg         AuthServiceConfig
 }
 
@@ -76,11 +93,13 @@ type AuthService struct {
 func NewAuthService(
 	userRepo domain.UserRepository,
 	sessionRepo domain.SessionRepository,
+	totpRepo domain.TOTPRepository,
 	cfg AuthServiceConfig,
 ) *AuthService {
 	return &AuthService{
 		userRepo:    userRepo,
 		sessionRepo: sessionRepo,
+		totpRepo:    totpRepo,
 		cfg:         cfg,
 	}
 }
@@ -110,8 +129,9 @@ func (s *AuthService) Register(input AuthInput) (*AuthResponse, error) {
 	return s.issueTokenPair(user, "", "")
 }
 
-// Login verifies credentials and returns a token pair.
-func (s *AuthService) Login(input LoginInput) (*AuthResponse, error) {
+// Login verifies credentials. If TOTP is enabled, returns a short-lived challenge
+// token instead of issuing a session. Otherwise returns a full token pair.
+func (s *AuthService) Login(input LoginInput) (*LoginResult, error) {
 	user, err := s.userRepo.FindByEmail(input.Email)
 	if err != nil {
 		return nil, apperror.Unauthorized("invalid credentials")
@@ -121,7 +141,59 @@ func (s *AuthService) Login(input LoginInput) (*AuthResponse, error) {
 		return nil, apperror.Unauthorized("invalid credentials")
 	}
 
-	return s.issueTokenPair(user, input.UserAgent, input.IPAddress)
+	if user.TOTPEnabled {
+		challengeToken, err := jwtutil.SignChallengeToken(user.ID, "totp_challenge", s.cfg.AccessSecret, 5)
+		if err != nil {
+			return nil, apperror.Internal("failed to sign challenge token")
+		}
+		return &LoginResult{Challenge: &TOTPChallengeResponse{
+			TOTPRequired:   true,
+			ChallengeToken: challengeToken,
+		}}, nil
+	}
+
+	auth, err := s.issueTokenPair(user, input.UserAgent, input.IPAddress)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginResult{Auth: auth}, nil
+}
+
+// VerifyTOTP validates a TOTP or backup code against the challenge token and
+// issues a full session if valid.
+func (s *AuthService) VerifyTOTP(challengeToken, code, userAgent, ipAddress string) (*AuthResponse, error) {
+	claims, err := jwtutil.ParseChallengeToken(challengeToken, s.cfg.AccessSecret)
+	if err != nil {
+		return nil, apperror.Unauthorized("invalid or expired challenge token")
+	}
+	if claims.Purpose != "totp_challenge" {
+		return nil, apperror.Unauthorized("invalid challenge token purpose")
+	}
+
+	user, err := s.userRepo.FindByID(claims.UserID)
+	if err != nil {
+		return nil, apperror.Unauthorized("user not found")
+	}
+
+	if totputil.Validate(user.TOTPSecret, code) {
+		return s.issueTokenPair(user, userAgent, ipAddress)
+	}
+
+	// Try backup codes.
+	backupCodes, err := s.totpRepo.FindUnusedBackupCodes(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, bc := range backupCodes {
+		if hashutil.Verify(code, bc.CodeHash) == nil {
+			if err := s.totpRepo.MarkBackupCodeUsed(bc.ID); err != nil {
+				return nil, err
+			}
+			return s.issueTokenPair(user, userAgent, ipAddress)
+		}
+	}
+
+	return nil, apperror.Unauthorized("invalid code")
 }
 
 // Refresh issues a new access token for a valid refresh token.
@@ -200,11 +272,12 @@ func (s *AuthService) issueTokenPair(user *domain.User, userAgent, ipAddress str
 
 func toUserInfo(u *domain.User) *UserInfo {
 	return &UserInfo{
-		ID:        u.ID,
-		Email:     u.Email,
-		Name:      u.Name,
-		AvatarURL: u.AvatarURL,
-		Provider:  string(u.Provider),
-		CreatedAt: u.CreatedAt,
+		ID:          u.ID,
+		Email:       u.Email,
+		Name:        u.Name,
+		AvatarURL:   u.AvatarURL,
+		Provider:    string(u.Provider),
+		TOTPEnabled: u.TOTPEnabled,
+		CreatedAt:   u.CreatedAt,
 	}
 }

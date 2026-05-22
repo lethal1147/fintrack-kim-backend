@@ -38,6 +38,7 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 	{
 		auth.POST("/register", h.Auth.Register)
 		auth.POST("/login", h.Auth.Login)
+		auth.POST("/totp-verify", h.Auth.VerifyTOTP)
 		auth.POST("/refresh", h.Auth.Refresh)
 		auth.POST("/logout", h.Auth.Logout) // public — cookie identifies the session
 		protected := auth.Group("")

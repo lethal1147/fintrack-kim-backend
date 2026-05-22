@@ -110,12 +110,53 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.svc.Login(service.LoginInput{
+	result, err := h.svc.Login(service.LoginInput{
 		Email:     req.Email,
 		Password:  req.Password,
 		UserAgent: c.GetHeader("User-Agent"),
 		IPAddress: c.ClientIP(),
 	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	if result.Challenge != nil {
+		response.Success(c, gin.H{
+			"totp_required":   result.Challenge.TOTPRequired,
+			"challenge_token": result.Challenge.ChallengeToken,
+		})
+		return
+	}
+
+	h.setRefreshCookie(c, result.Auth.RefreshToken)
+	response.Success(c, gin.H{
+		"access_token": result.Auth.AccessToken,
+		"user":         result.Auth.User,
+	})
+}
+
+// VerifyTOTP godoc
+// @Summary      Verify TOTP code after login
+// @Description  Completes the 2FA login step. Sets refresh_token cookie and returns access_token + user.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]interface{}
+// @Router       /auth/totp-verify [post]
+func (h *AuthHandler) VerifyTOTP(c *gin.Context) {
+	var req struct {
+		ChallengeToken string `json:"challenge_token" binding:"required"`
+		Code           string `json:"code"            binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperror.BadRequest(err.Error()))
+		return
+	}
+
+	resp, err := h.svc.VerifyTOTP(req.ChallengeToken, req.Code, c.GetHeader("User-Agent"), c.ClientIP())
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -208,12 +249,13 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"id":         profile.ID,
-			"email":      profile.Email,
-			"name":       profile.Name,
-			"avatar_url": profile.AvatarURL,
-			"provider":   profile.Provider,
-			"created_at": profile.CreatedAt,
+			"id":           profile.ID,
+			"email":        profile.Email,
+			"name":         profile.Name,
+			"avatar_url":   profile.AvatarURL,
+			"provider":     profile.Provider,
+			"totp_enabled": profile.TOTPEnabled,
+			"created_at":   profile.CreatedAt,
 		},
 	})
 }
