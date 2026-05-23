@@ -18,16 +18,18 @@ import (
 // ─── mock security service ────────────────────────────────────────────────────
 
 type mockSecuritySvc struct {
-	sessionsResp     []domain.SessionInfo
-	sessionsErr      error
-	revokeErr        error
-	reqPwChangeErr   error
-	changePwErr      error
-	setupTOTPResp    *domain.TOTPSetupResult
-	setupTOTPErr     error
-	confirmTOTPCodes []string
-	confirmTOTPErr   error
-	disableTOTPErr   error
+	sessionsResp       []domain.SessionInfo
+	sessionsErr        error
+	revokeErr          error
+	reqPwChangeErr     error
+	changePwErr        error
+	setupTOTPResp      *domain.TOTPSetupResult
+	setupTOTPErr       error
+	confirmTOTPCodes   []string
+	confirmTOTPErr     error
+	disableTOTPErr     error
+	reqPwResetErr      error
+	resetPasswordErr   error
 }
 
 func (m *mockSecuritySvc) ListSessions(_ context.Context, _, _ string) ([]domain.SessionInfo, error) {
@@ -47,6 +49,12 @@ func (m *mockSecuritySvc) ConfirmTOTP(_ context.Context, _, _ string) ([]string,
 	return m.confirmTOTPCodes, m.confirmTOTPErr
 }
 func (m *mockSecuritySvc) DisableTOTP(_ context.Context, _, _ string) error { return m.disableTOTPErr }
+func (m *mockSecuritySvc) RequestPasswordReset(_ context.Context, _ string) error {
+	return m.reqPwResetErr
+}
+func (m *mockSecuritySvc) ResetPassword(_ context.Context, _, _, _ string) error {
+	return m.resetPasswordErr
+}
 
 // ─── test helpers ─────────────────────────────────────────────────────────────
 
@@ -183,5 +191,71 @@ func TestSecurity_ChangePassword_MissingBody(t *testing.T) {
 	w := doSecPost(r, "/security/password/change", signTestToken("user1"), nil)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+// ─── forgot password router ───────────────────────────────────────────────────
+
+func forgotPasswordRouter(svc domain.SecurityServiceInterface) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := NewSecurityHandler(svc, testSecret, false)
+	auth := r.Group("/auth")
+	{
+		auth.POST("/forgot-password/request", h.ForgotPasswordRequest)
+		auth.POST("/forgot-password/reset", h.ForgotPasswordReset)
+	}
+	return r
+}
+
+// ─── TestSecurity_ForgotPasswordRequest_OK ───────────────────────────────────
+
+func TestSecurity_ForgotPasswordRequest_OK(t *testing.T) {
+	r := forgotPasswordRouter(&mockSecuritySvc{})
+	w := doSecPost(r, "/auth/forgot-password/request", "", map[string]string{
+		"email": "user@example.com",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ─── TestSecurity_ForgotPasswordRequest_InvalidEmail ─────────────────────────
+
+func TestSecurity_ForgotPasswordRequest_InvalidEmail(t *testing.T) {
+	r := forgotPasswordRouter(&mockSecuritySvc{})
+	w := doSecPost(r, "/auth/forgot-password/request", "", map[string]string{
+		"email": "not-an-email",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ─── TestSecurity_ForgotPasswordReset_OK ─────────────────────────────────────
+
+func TestSecurity_ForgotPasswordReset_OK(t *testing.T) {
+	r := forgotPasswordRouter(&mockSecuritySvc{})
+	w := doSecPost(r, "/auth/forgot-password/reset", "", map[string]interface{}{
+		"email":        "user@example.com",
+		"otp":          "123456",
+		"new_password": "newpassword123",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ─── TestSecurity_ForgotPasswordReset_BadRequest ──────────────────────────────
+
+func TestSecurity_ForgotPasswordReset_BadRequest(t *testing.T) {
+	r := forgotPasswordRouter(&mockSecuritySvc{})
+	// Missing new_password field
+	w := doSecPost(r, "/auth/forgot-password/reset", "", map[string]string{
+		"email": "user@example.com",
+		"otp":   "123456",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }

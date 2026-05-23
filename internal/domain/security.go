@@ -64,4 +64,6 @@ type SecurityServiceInterface interface {
 	SetupTOTP(ctx context.Context, userID string) (*TOTPSetupResult, error)
 	ConfirmTOTP(ctx context.Context, userID, code string) ([]string, error)
 	DisableTOTP(ctx context.Context, userID, code string) error
+	RequestPasswordReset(ctx context.Context, email string) error
+	ResetPassword(ctx context.Context, email, otp, newPassword string) error
 }

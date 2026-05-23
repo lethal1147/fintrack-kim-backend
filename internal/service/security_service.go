@@ -257,6 +257,77 @@ func (s *SecurityService) disableTOTPForUser(user *domain.User) error {
 	return s.totpRepo.DeleteBackupCodes(user.ID)
 }
 
+// ─── Forgot password (unauthenticated) ───────────────────────────────────────
+
+func (s *SecurityService) RequestPasswordReset(ctx context.Context, email string) error {
+	user, err := s.userRepo.FindByEmail(email)
+	if err != nil || user == nil {
+		// Silently succeed — don't leak whether the email is registered.
+		return nil
+	}
+
+	_ = s.otpRepo.DeleteByUserAndPurpose(user.ID, "password_reset")
+
+	code := fmt.Sprintf("%06d", rand.Intn(1_000_000))
+	codeHash, err := hashutil.Hash(code)
+	if err != nil {
+		return apperror.Internal("failed to hash code")
+	}
+	if err := s.otpRepo.Create(&domain.OTPToken{
+		UserID:    user.ID,
+		Purpose:   "password_reset",
+		CodeHash:  codeHash,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	}); err != nil {
+		return err
+	}
+
+	html := fmt.Sprintf(
+		"<p>Your FinTrack password reset code is: <strong>%s</strong></p><p>This code expires in 15 minutes.</p>",
+		code,
+	)
+	return s.emailSender.Send(ctx, email, "Reset your FinTrack password", html)
+}
+
+func (s *SecurityService) ResetPassword(_ context.Context, email, otp, newPassword string) error {
+	if len(newPassword) < 8 || len(newPassword) > 100 {
+		return apperror.BadRequest("password must be between 8 and 100 characters")
+	}
+
+	user, err := s.userRepo.FindByEmail(email)
+	if err != nil || user == nil {
+		return apperror.BadRequest("invalid or expired code")
+	}
+
+	token, err := s.otpRepo.FindActive(user.ID, "password_reset")
+	if err != nil {
+		return err
+	}
+	if token == nil {
+		return apperror.BadRequest("invalid or expired code")
+	}
+
+	if err := hashutil.Verify(otp, token.CodeHash); err != nil {
+		return apperror.BadRequest("invalid or expired code")
+	}
+
+	newHash, err := hashutil.Hash(newPassword)
+	if err != nil {
+		return apperror.Internal("failed to hash password")
+	}
+	user.PasswordHash = newHash
+	user.UpdatedAt = time.Now()
+	if err := s.userRepo.Update(user); err != nil {
+		return err
+	}
+
+	if err := s.otpRepo.MarkUsed(token.ID); err != nil {
+		return err
+	}
+
+	return s.sessionRepo.DeleteAllByUserID(user.ID)
+}
+
 // ─── User-agent parsing ───────────────────────────────────────────────────────
 
 var (

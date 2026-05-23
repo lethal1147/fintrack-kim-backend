@@ -52,6 +52,8 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 		auth.POST("/totp-verify", h.Auth.VerifyTOTP)
 		auth.POST("/refresh", h.Auth.Refresh)
 		auth.POST("/logout", h.Auth.Logout) // public — cookie identifies the session
+		auth.POST("/forgot-password/request", h.Security.ForgotPasswordRequest)
+		auth.POST("/forgot-password/reset",   h.Security.ForgotPasswordReset)
 		protected := auth.Group("")
 		protected.Use(authMiddleware)
 		{

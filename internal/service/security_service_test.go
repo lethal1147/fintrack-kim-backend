@@ -112,7 +112,7 @@ type mockSecUserRepo struct {
 }
 
 func (m *mockSecUserRepo) FindByID(_ string) (*domain.User, error)             { return m.user, nil }
-func (m *mockSecUserRepo) FindByEmail(_ string) (*domain.User, error)          { return nil, nil }
+func (m *mockSecUserRepo) FindByEmail(_ string) (*domain.User, error)          { return m.user, nil }
 func (m *mockSecUserRepo) FindByProviderID(_ domain.AuthProvider, _ string) (*domain.User, error) {
 	return nil, nil
 }
@@ -407,5 +407,103 @@ func TestSecurity_DisableTOTP_InvalidCode(t *testing.T) {
 	err := svc.DisableTOTP(context.Background(), "u1", "wrongcode")
 	if err == nil {
 		t.Fatal("expected error for invalid code")
+	}
+}
+
+// ─── TestSecurity_RequestPasswordReset_SendsOTP ───────────────────────────────
+
+func TestSecurity_RequestPasswordReset_SendsOTP(t *testing.T) {
+	userRepo := &mockSecUserRepo{user: &domain.User{ID: "u1", Email: "user@example.com"}}
+	otpRepo := &mockOTPRepo{}
+	email := &mockEmailSender{}
+	svc := NewSecurityService(userRepo, &mockSecSessionRepo{}, otpRepo, nil, email, "secret")
+
+	if err := svc.RequestPasswordReset(context.Background(), "user@example.com"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if email.lastTo != "user@example.com" {
+		t.Errorf("email sent to %q, want user@example.com", email.lastTo)
+	}
+	if otpRepo.created == nil {
+		t.Fatal("expected OTP token to be created")
+	}
+	if otpRepo.created.Purpose != "password_reset" {
+		t.Errorf("OTP purpose = %q, want password_reset", otpRepo.created.Purpose)
+	}
+}
+
+// ─── TestSecurity_RequestPasswordReset_UserNotFound_ReturnsNil ───────────────
+
+func TestSecurity_RequestPasswordReset_UserNotFound_ReturnsNil(t *testing.T) {
+	// mockSecUserRepo with nil user simulates email not found.
+	userRepo := &mockSecUserRepo{user: nil}
+	svc := NewSecurityService(userRepo, &mockSecSessionRepo{}, &mockOTPRepo{}, nil, &mockEmailSender{}, "secret")
+
+	// Must return nil — silently succeed, never leak email existence.
+	if err := svc.RequestPasswordReset(context.Background(), "unknown@example.com"); err != nil {
+		t.Fatalf("expected nil error for unknown email, got %v", err)
+	}
+}
+
+// ─── TestSecurity_ResetPassword_OK ───────────────────────────────────────────
+
+func TestSecurity_ResetPassword_OK(t *testing.T) {
+	code := "654321"
+	hash, _ := hashutil.Hash(code)
+	otpRepo := &mockOTPRepo{activeToken: &domain.OTPToken{
+		ID:        "tok2",
+		CodeHash:  hash,
+		ExpiresAt: time.Now().Add(10 * time.Minute),
+	}}
+	sessRepo := &mockSecSessionRepo{}
+	userRepo := &mockSecUserRepo{user: &domain.User{ID: "u1", Email: "user@example.com"}}
+	svc := NewSecurityService(userRepo, sessRepo, otpRepo, nil, nil, "secret")
+
+	if err := svc.ResetPassword(context.Background(), "user@example.com", code, "newpassword123"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if otpRepo.markedUsed != "tok2" {
+		t.Errorf("expected token tok2 marked used, got %q", otpRepo.markedUsed)
+	}
+	if sessRepo.deleteAllUID != "u1" {
+		t.Errorf("expected all sessions deleted for u1, got %q", sessRepo.deleteAllUID)
+	}
+	if userRepo.updated == nil {
+		t.Fatal("expected user to be updated")
+	}
+}
+
+// ─── TestSecurity_ResetPassword_InvalidOTP ───────────────────────────────────
+
+func TestSecurity_ResetPassword_InvalidOTP(t *testing.T) {
+	hash, _ := hashutil.Hash("correct")
+	otpRepo := &mockOTPRepo{activeToken: &domain.OTPToken{
+		ID:        "tok2",
+		CodeHash:  hash,
+		ExpiresAt: time.Now().Add(10 * time.Minute),
+	}}
+	userRepo := &mockSecUserRepo{user: &domain.User{ID: "u1", Email: "user@example.com"}}
+	svc := NewSecurityService(userRepo, &mockSecSessionRepo{}, otpRepo, nil, nil, "secret")
+
+	err := svc.ResetPassword(context.Background(), "user@example.com", "wrong", "newpassword123")
+	if err == nil {
+		t.Fatal("expected error for invalid OTP, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid") {
+		t.Errorf("expected 'invalid' in error, got %q", err.Error())
+	}
+}
+
+// ─── TestSecurity_ResetPassword_ShortPassword ────────────────────────────────
+
+func TestSecurity_ResetPassword_ShortPassword(t *testing.T) {
+	svc := NewSecurityService(nil, nil, nil, nil, nil, "secret")
+	err := svc.ResetPassword(context.Background(), "user@example.com", "123456", "short")
+	if err == nil {
+		t.Fatal("expected error for short password, got nil")
+	}
+	if !strings.Contains(err.Error(), "8") {
+		t.Errorf("expected '8' in error message, got %q", err.Error())
 	}
 }
