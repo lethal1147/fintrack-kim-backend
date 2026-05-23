@@ -255,6 +255,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 			"avatar_url":   profile.AvatarURL,
 			"provider":     profile.Provider,
 			"totp_enabled": profile.TOTPEnabled,
+			"locale":       profile.Locale,
 			"created_at":   profile.CreatedAt,
 		},
 	})

@@ -53,6 +53,7 @@ type UserInfo struct {
 	AvatarURL   string    `json:"avatar_url"`
 	Provider    string    `json:"provider"`
 	TOTPEnabled bool      `json:"totp_enabled"`
+	Locale      string    `json:"locale"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -278,6 +279,7 @@ func toUserInfo(u *domain.User) *UserInfo {
 		AvatarURL:   u.AvatarURL,
 		Provider:    string(u.Provider),
 		TOTPEnabled: u.TOTPEnabled,
+		Locale:      u.Locale,
 		CreatedAt:   u.CreatedAt,
 	}
 }

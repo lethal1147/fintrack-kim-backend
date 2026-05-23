@@ -17,8 +17,9 @@ func NewProfileHandler(svc service.ProfileServiceInterface) *ProfileHandler {
 }
 
 type updateProfileRequest struct {
-	Name  string `json:"name"  binding:"required"`
-	Email string `json:"email" binding:"required,email"`
+	Name   string `json:"name"   binding:"required"`
+	Email  string `json:"email"  binding:"required,email"`
+	Locale string `json:"locale" binding:"omitempty"`
 }
 
 type deleteAccountRequest struct {
@@ -31,6 +32,7 @@ type profileResponse struct {
 	Email     string `json:"email"`
 	AvatarURL string `json:"avatar_url"`
 	Provider  string `json:"provider"`
+	Locale    string `json:"locale"`
 }
 
 // Update godoc
@@ -55,8 +57,9 @@ func (h *ProfileHandler) Update(c *gin.Context) {
 
 	userID := c.GetString(middleware.ContextUserID)
 	info, err := h.svc.UpdateProfile(userID, service.UpdateProfileRequest{
-		Name:  req.Name,
-		Email: req.Email,
+		Name:   req.Name,
+		Email:  req.Email,
+		Locale: req.Locale,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -69,6 +72,7 @@ func (h *ProfileHandler) Update(c *gin.Context) {
 		Email:     info.Email,
 		AvatarURL: info.AvatarURL,
 		Provider:  info.Provider,
+		Locale:    info.Locale,
 	})
 }
 

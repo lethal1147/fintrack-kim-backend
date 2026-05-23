@@ -195,3 +195,53 @@ func TestProfile_DeleteAccount_MissingPassword(t *testing.T) {
 		t.Errorf("status: got %d, want 400 — body: %s", w.Code, w.Body.String())
 	}
 }
+
+// ── locale tests ───────────────────────────────────────────────────────────────
+
+func TestProfile_Update_WithLocale_OK(t *testing.T) {
+	info := sampleUserInfo()
+	info.Locale = "th"
+	svc := &mockProfileSvc{userInfo: info}
+	r := profileRouter(svc)
+
+	body, _ := json.Marshal(map[string]string{"name": "Kim", "email": "kim@example.com", "locale": "th"})
+	req, _ := http.NewRequest(http.MethodPatch, "/profile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+signTestToken("user-1"))
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want 200 — body: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			Locale string `json:"locale"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Data.Locale != "th" {
+		t.Errorf("locale in response: got %q, want %q", resp.Data.Locale, "th")
+	}
+}
+
+func TestProfile_Update_InvalidLocale(t *testing.T) {
+	svc := &mockProfileSvc{updateErr: apperror.BadRequest("locale must be one of: en, th")}
+	r := profileRouter(svc)
+
+	body, _ := json.Marshal(map[string]string{"name": "Kim", "email": "kim@example.com", "locale": "fr"})
+	req, _ := http.NewRequest(http.MethodPatch, "/profile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+signTestToken("user-1"))
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want 400 — body: %s", w.Code, w.Body.String())
+	}
+}

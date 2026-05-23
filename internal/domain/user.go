@@ -20,6 +20,7 @@ type User struct {
 	ProviderID   string
 	TOTPSecret   string
 	TOTPEnabled  bool
+	Locale       string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

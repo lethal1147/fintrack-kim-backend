@@ -235,3 +235,34 @@ func TestProfile_DeleteAccount_MissingPassword(t *testing.T) {
 		t.Errorf("expected BAD_REQUEST, got %v", err)
 	}
 }
+
+// ── locale tests ──────────────────────────────────────────────────────────────
+
+func TestProfile_UpdateProfile_UpdatesLocale_OK(t *testing.T) {
+	repo := &mockProfileUserRepo{user: sampleUser()}
+	svc := NewProfileService(repo, nil)
+
+	info, err := svc.UpdateProfile("user-1", UpdateProfileRequest{Name: "Kim", Email: "kim@example.com", Locale: "th"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.Locale != "th" {
+		t.Errorf("locale: got %q, want %q", info.Locale, "th")
+	}
+	if repo.user.Locale != "th" {
+		t.Error("expected Locale to be persisted on user")
+	}
+}
+
+func TestProfile_UpdateProfile_InvalidLocale(t *testing.T) {
+	repo := &mockProfileUserRepo{user: sampleUser()}
+	svc := NewProfileService(repo, nil)
+
+	_, err := svc.UpdateProfile("user-1", UpdateProfileRequest{Name: "Kim", Email: "kim@example.com", Locale: "fr"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if ae, ok := err.(*apperror.AppError); !ok || ae.Code != "BAD_REQUEST" {
+		t.Errorf("expected BAD_REQUEST, got %v", err)
+	}
+}

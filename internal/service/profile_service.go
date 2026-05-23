@@ -22,8 +22,9 @@ type ProfileServiceInterface interface {
 
 // UpdateProfileRequest carries the fields the user may update.
 type UpdateProfileRequest struct {
-	Name  string
-	Email string
+	Name   string
+	Email  string
+	Locale string
 }
 
 // ProfileService implements ProfileServiceInterface.
@@ -64,6 +65,12 @@ func (s *ProfileService) UpdateProfile(userID string, req UpdateProfileRequest) 
 
 	user.Name = req.Name
 	user.Email = req.Email
+	if req.Locale != "" {
+		if req.Locale != "en" && req.Locale != "th" {
+			return nil, apperror.BadRequest("locale must be one of: en, th")
+		}
+		user.Locale = req.Locale
+	}
 	user.UpdatedAt = time.Now()
 
 	if err := s.userRepo.Update(user); err != nil {
@@ -76,6 +83,7 @@ func (s *ProfileService) UpdateProfile(userID string, req UpdateProfileRequest) 
 		Name:      user.Name,
 		AvatarURL: user.AvatarURL,
 		Provider:  string(user.Provider),
+		Locale:    user.Locale,
 		CreatedAt: user.CreatedAt,
 	}, nil
 }
