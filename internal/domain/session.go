@@ -15,6 +15,7 @@ type Session struct {
 
 type SessionRepository interface {
 	Create(session *Session) error
+	FindByID(id string) (*Session, error)
 	FindByRefreshToken(token string) (*Session, error)
 	DeleteByID(id string) error
 	DeleteAllByUserID(userID string) error

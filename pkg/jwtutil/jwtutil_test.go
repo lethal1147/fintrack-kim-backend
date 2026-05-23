@@ -13,7 +13,7 @@ const (
 )
 
 func TestSignAndParseAccessToken(t *testing.T) {
-	token, err := SignAccessToken("user-123", testAccessSecret, 15)
+	token, err := SignAccessToken("user-123", "sess-test", testAccessSecret, 15)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestSignAndParseRefreshToken(t *testing.T) {
 }
 
 func TestParseAccessToken_WrongSecret(t *testing.T) {
-	token, _ := SignAccessToken("u1", testAccessSecret, 15)
+	token, _ := SignAccessToken("u1", "sess-test", testAccessSecret, 15)
 	_, err := ParseAccessToken(token, "wrong-secret")
 	if err == nil {
 		t.Error("expected error for wrong secret")
@@ -63,7 +63,7 @@ func TestParseAccessToken_Expired(t *testing.T) {
 }
 
 func TestParseAccessToken_Tampered(t *testing.T) {
-	token, _ := SignAccessToken("u1", testAccessSecret, 15)
+	token, _ := SignAccessToken("u1", "sess-test", testAccessSecret, 15)
 	_, err := ParseAccessToken(token+"x", testAccessSecret)
 	if err == nil {
 		t.Error("expected error for tampered token")
@@ -102,7 +102,7 @@ func TestParseRefreshToken_Tampered(t *testing.T) {
 
 func TestKeyFunc_RejectsNonHMAC(t *testing.T) {
 	// Sign with HS256 but try to parse with an HMAC check that verifies the method
-	token, _ := SignAccessToken("u1", testAccessSecret, 15)
+	token, _ := SignAccessToken("u1", "sess-test", testAccessSecret, 15)
 	claims, err := ParseAccessToken(token, testAccessSecret)
 	if err != nil {
 		t.Fatalf("valid token should parse: %v", err)

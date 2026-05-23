@@ -207,7 +207,7 @@ func (s *AuthService) Refresh(refreshToken string) (*RefreshResponse, error) {
 		return nil, apperror.Unauthorized("invalid or expired refresh token")
 	}
 
-	accessToken, err := jwtutil.SignAccessToken(session.UserID, s.cfg.AccessSecret, s.cfg.AccessExpiryMinutes)
+	accessToken, err := jwtutil.SignAccessToken(session.UserID, session.ID, s.cfg.AccessSecret, s.cfg.AccessExpiryMinutes)
 	if err != nil {
 		return nil, apperror.Internal("failed to sign access token")
 	}
@@ -258,7 +258,7 @@ func (s *AuthService) issueTokenPair(user *domain.User, userAgent, ipAddress str
 		return nil, err
 	}
 
-	accessToken, err := jwtutil.SignAccessToken(user.ID, s.cfg.AccessSecret, s.cfg.AccessExpiryMinutes)
+	accessToken, err := jwtutil.SignAccessToken(user.ID, session.ID, s.cfg.AccessSecret, s.cfg.AccessExpiryMinutes)
 	if err != nil {
 		return nil, apperror.Internal("failed to sign access token")
 	}

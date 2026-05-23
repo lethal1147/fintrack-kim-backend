@@ -23,7 +23,7 @@ func setupRouter(secret string) *gin.Engine {
 }
 
 func TestAuth_ValidToken(t *testing.T) {
-	token, err := jwtutil.SignAccessToken("user-42", testSecret, 15)
+	token, err := jwtutil.SignAccessToken("user-42", "sess-test", testSecret, 15)
 	if err != nil {
 		t.Fatalf("sign token: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestAuth_InvalidToken(t *testing.T) {
 }
 
 func TestAuth_WrongSecret(t *testing.T) {
-	token, _ := jwtutil.SignAccessToken("u1", "other-secret", 15)
+	token, _ := jwtutil.SignAccessToken("u1", "sess-test", "other-secret", 15)
 	r := setupRouter(testSecret)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/protected", nil)

@@ -71,6 +71,7 @@ func main() {
 		JWTAccessSecret:  cfg.JWTAccessSecret,
 		JWTRefreshSecret: cfg.JWTRefreshSecret,
 		SwaggerEnabled:   cfg.SwaggerEnabled,
+		SessionRepo:      sessionRepo,
 	}, router.Handlers{
 		Health:      healthHandler,
 		Auth:        authHandler,

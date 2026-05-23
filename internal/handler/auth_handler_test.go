@@ -54,7 +54,7 @@ func (m *mockAuthSvc) VerifyTOTP(_, _, _, _ string) (*service.AuthResponse, erro
 const testSecret = "test-access-secret-value-32chars"
 
 func signTestToken(userID string) string {
-	tok, err := jwtutil.SignAccessToken(userID, testSecret, 15)
+	tok, err := jwtutil.SignAccessToken(userID, "sess-test", testSecret, 15)
 	if err != nil {
 		panic("signTestToken: " + err.Error())
 	}

@@ -33,6 +33,7 @@ func (m *mockSecSessionRepo) DeleteAllByUserID(uid string) error {
 	m.deleteAllUID = uid
 	return nil
 }
+func (m *mockSecSessionRepo) FindByID(_ string) (*domain.Session, error) { return nil, nil }
 func (m *mockSecSessionRepo) ListByUserID(_ string) ([]*domain.Session, error) {
 	return m.sessions, nil
 }

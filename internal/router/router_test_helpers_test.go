@@ -11,6 +11,17 @@ import (
 
 type stubAuthSvc struct{}
 
+// stubSessionRepo satisfies domain.SessionRepository for router tests.
+type stubSessionRepo struct{}
+
+func (s *stubSessionRepo) Create(_ *domain.Session) error                              { return nil }
+func (s *stubSessionRepo) FindByID(_ string) (*domain.Session, error)                  { return nil, nil }
+func (s *stubSessionRepo) FindByRefreshToken(_ string) (*domain.Session, error)        { return nil, nil }
+func (s *stubSessionRepo) DeleteByID(_ string) error                                   { return nil }
+func (s *stubSessionRepo) DeleteAllByUserID(_ string) error                            { return nil }
+func (s *stubSessionRepo) ListByUserID(_ string) ([]*domain.Session, error)            { return nil, nil }
+func (s *stubSessionRepo) UpdateLastActive(_ string, _ time.Time) error                { return nil }
+
 func (s *stubAuthSvc) Register(_ service.AuthInput) (*service.AuthResponse, error)         { return nil, nil }
 func (s *stubAuthSvc) Login(_ service.LoginInput) (*service.LoginResult, error)            { return nil, nil }
 func (s *stubAuthSvc) Refresh(_ string) (*service.RefreshResponse, error)                  { return nil, nil }
@@ -38,6 +49,9 @@ func (s *stubTxSvc) Summary(_ string, _, _ time.Time) (*domain.TransactionSummar
 
 // newTestRouter wires stub handlers into the real router.New for integration tests.
 func newTestRouter(cfg RouterConfig) *gin.Engine {
+	if cfg.SessionRepo == nil {
+		cfg.SessionRepo = &stubSessionRepo{}
+	}
 	healthHandler := handler.NewHealthHandler(&stubHealthSvc{})
 	authHandler := handler.NewAuthHandler(&stubAuthSvc{}, false)
 	txHandler := handler.NewTransactionHandler(&stubTxSvc{})

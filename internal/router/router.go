@@ -6,6 +6,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 
 	_ "github.com/joakim/fintrack-api/docs"
+	"github.com/joakim/fintrack-api/internal/domain"
 	"github.com/joakim/fintrack-api/internal/handler"
 	"github.com/joakim/fintrack-api/internal/middleware"
 )
@@ -26,6 +27,16 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	sessionExists := func(id string) bool {
+		if cfg.SessionRepo == nil {
+			return true
+		}
+		_, err := cfg.SessionRepo.FindByID(id)
+		return err == nil
+	}
+
+	authMiddleware := middleware.Auth(cfg.JWTAccessSecret, sessionExists)
+
 	r := gin.New()
 	r.Use(middleware.Logger())
 	r.Use(middleware.CORS(cfg.FrontendOrigin))
@@ -42,7 +53,7 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 		auth.POST("/refresh", h.Auth.Refresh)
 		auth.POST("/logout", h.Auth.Logout) // public — cookie identifies the session
 		protected := auth.Group("")
-		protected.Use(middleware.Auth(cfg.JWTAccessSecret))
+		protected.Use(authMiddleware)
 		{
 			protected.POST("/logout-all", h.Auth.LogoutAll)
 			protected.GET("/me", h.Auth.Me)
@@ -50,7 +61,7 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 	}
 
 	tx := r.Group("/transactions")
-	tx.Use(middleware.Auth(cfg.JWTAccessSecret))
+	tx.Use(authMiddleware)
 	{
 		tx.GET("", h.Transaction.List)
 		tx.POST("", h.Transaction.Create)
@@ -62,7 +73,7 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 	}
 
 	rec := r.Group("/recurring")
-	rec.Use(middleware.Auth(cfg.JWTAccessSecret))
+	rec.Use(authMiddleware)
 	{
 		rec.GET("", h.Recurring.List)
 		rec.POST("", h.Recurring.Create)
@@ -73,7 +84,7 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 	}
 
 	bud := r.Group("/budget")
-	bud.Use(middleware.Auth(cfg.JWTAccessSecret))
+	bud.Use(authMiddleware)
 	{
 		bud.GET("", h.Budget.List)
 		bud.POST("", h.Budget.Create)
@@ -82,14 +93,14 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 	}
 
 	prof := r.Group("/profile")
-	prof.Use(middleware.Auth(cfg.JWTAccessSecret))
+	prof.Use(authMiddleware)
 	{
 		prof.PATCH("", h.Profile.Update)
 		prof.POST("/avatar", h.Profile.UploadAvatar)
 	}
 
 	sec := r.Group("/security")
-	sec.Use(middleware.Auth(cfg.JWTAccessSecret))
+	sec.Use(authMiddleware)
 	{
 		sec.GET("/sessions",          h.Security.ListSessions)
 		sec.DELETE("/sessions/:id",   h.Security.RevokeSession)
@@ -113,4 +124,5 @@ type RouterConfig struct {
 	JWTAccessSecret  string
 	JWTRefreshSecret string
 	SwaggerEnabled   bool
+	SessionRepo      domain.SessionRepository
 }

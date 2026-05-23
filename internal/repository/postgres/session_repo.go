@@ -43,6 +43,17 @@ func (r *SessionRepo) Create(s *domain.Session) error {
 	return nil
 }
 
+func (r *SessionRepo) FindByID(id string) (*domain.Session, error) {
+	var m sessionModel
+	if err := r.db.First(&m, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperror.NotFound("session not found")
+		}
+		return nil, apperror.Internal(err.Error())
+	}
+	return toSessionDomain(&m), nil
+}
+
 func (r *SessionRepo) FindByRefreshToken(token string) (*domain.Session, error) {
 	var m sessionModel
 	if err := r.db.First(&m, "refresh_token = ?", token).Error; err != nil {

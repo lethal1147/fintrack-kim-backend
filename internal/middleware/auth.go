@@ -9,9 +9,15 @@ import (
 	"github.com/joakim/fintrack-api/pkg/response"
 )
 
-const ContextUserID = "userID"
+const (
+	ContextUserID    = "userID"
+	ContextSessionID = "sessionID"
+)
 
-func Auth(accessSecret string) gin.HandlerFunc {
+// Auth validates the Bearer access token. If sessionExists is provided it is
+// called with the session ID embedded in the token — returning false causes an
+// immediate 401, enabling instant revocation when a session is deleted.
+func Auth(accessSecret string, sessionExists ...func(id string) bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if !strings.HasPrefix(header, "Bearer ") {
@@ -26,7 +32,15 @@ func Auth(accessSecret string) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		if len(sessionExists) > 0 && sessionExists[0] != nil {
+			if !sessionExists[0](claims.SessionID) {
+				response.Error(c, apperror.Unauthorized("session has been revoked"))
+				c.Abort()
+				return
+			}
+		}
 		c.Set(ContextUserID, claims.UserID)
+		c.Set(ContextSessionID, claims.SessionID)
 		c.Next()
 	}
 }

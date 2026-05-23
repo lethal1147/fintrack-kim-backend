@@ -112,6 +112,14 @@ func (m *mockSessionRepo) DeleteAllByUserID(userID string) error {
 	return nil
 }
 
+func (m *mockSessionRepo) FindByID(id string) (*domain.Session, error) {
+	for _, s := range m.byToken {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return nil, apperror.NotFound("session not found")
+}
 func (m *mockSessionRepo) ListByUserID(_ string) ([]*domain.Session, error) { return nil, nil }
 func (m *mockSessionRepo) UpdateLastActive(_ string, _ time.Time) error      { return nil }
 
