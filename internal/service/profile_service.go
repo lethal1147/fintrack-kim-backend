@@ -9,6 +9,7 @@ import (
 
 	"github.com/joakim/fintrack-api/internal/domain"
 	"github.com/joakim/fintrack-api/pkg/apperror"
+	"github.com/joakim/fintrack-api/pkg/hashutil"
 	"github.com/joakim/fintrack-api/pkg/r2client"
 )
 
@@ -16,6 +17,7 @@ import (
 type ProfileServiceInterface interface {
 	UpdateProfile(userID string, req UpdateProfileRequest) (*UserInfo, error)
 	UploadAvatar(userID, filename, contentType string, size int64, r io.Reader) (string, error)
+	DeleteAccount(userID, password string) error
 }
 
 // UpdateProfileRequest carries the fields the user may update.
@@ -76,6 +78,22 @@ func (s *ProfileService) UpdateProfile(userID string, req UpdateProfileRequest) 
 		Provider:  string(user.Provider),
 		CreatedAt: user.CreatedAt,
 	}, nil
+}
+
+// DeleteAccount verifies the password then hard-deletes the user row.
+// All child data (transactions, sessions, etc.) cascades via FK constraints.
+func (s *ProfileService) DeleteAccount(userID, password string) error {
+	if password == "" {
+		return apperror.BadRequest("password is required")
+	}
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return err
+	}
+	if err := hashutil.Verify(password, user.PasswordHash); err != nil {
+		return apperror.BadRequest("incorrect password")
+	}
+	return s.userRepo.Delete(userID)
 }
 
 var allowedContentTypes = map[string]string{

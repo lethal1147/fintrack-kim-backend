@@ -99,6 +99,7 @@ func New(cfg RouterConfig, h Handlers) *gin.Engine {
 	{
 		prof.PATCH("", h.Profile.Update)
 		prof.POST("/avatar", h.Profile.UploadAvatar)
+		prof.DELETE("", h.Profile.DeleteAccount)
 	}
 
 	sec := r.Group("/security")

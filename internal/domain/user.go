@@ -30,4 +30,5 @@ type UserRepository interface {
 	FindByProviderID(provider AuthProvider, providerID string) (*User, error)
 	Create(user *User) error
 	Update(user *User) error
+	Delete(id string) error
 }

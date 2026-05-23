@@ -21,6 +21,10 @@ type updateProfileRequest struct {
 	Email string `json:"email" binding:"required,email"`
 }
 
+type deleteAccountRequest struct {
+	Password string `json:"password" binding:"required"`
+}
+
 type profileResponse struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -66,6 +70,33 @@ func (h *ProfileHandler) Update(c *gin.Context) {
 		AvatarURL: info.AvatarURL,
 		Provider:  info.Provider,
 	})
+}
+
+// DeleteAccount godoc
+// @Summary      Delete account
+// @Description  Verifies password and permanently deletes the authenticated user and all their data
+// @Tags         profile
+// @Accept       json
+// @Produce      json
+// @Param        body  body      deleteAccountRequest  true  "Current password"
+// @Success      200   {object}  map[string]interface{}
+// @Failure      400   {object}  map[string]interface{}
+// @Failure      401   {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /profile [delete]
+func (h *ProfileHandler) DeleteAccount(c *gin.Context) {
+	var req deleteAccountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperror.BadRequest(err.Error()))
+		return
+	}
+
+	userID := c.GetString(middleware.ContextUserID)
+	if err := h.svc.DeleteAccount(userID, req.Password); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"deleted": true})
 }
 
 // UploadAvatar godoc

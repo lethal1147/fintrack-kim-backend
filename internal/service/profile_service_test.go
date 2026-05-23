@@ -10,6 +10,7 @@ import (
 
 	"github.com/joakim/fintrack-api/internal/domain"
 	"github.com/joakim/fintrack-api/pkg/apperror"
+	"github.com/joakim/fintrack-api/pkg/hashutil"
 )
 
 // ── mock user repo ────────────────────────────────────────────────────────────
@@ -18,6 +19,8 @@ type mockProfileUserRepo struct {
 	user        *domain.User
 	findByEmail *domain.User
 	updateErr   error
+	deleteErr   error
+	deleted     bool
 }
 
 func (m *mockProfileUserRepo) FindByID(_ string) (*domain.User, error) {
@@ -42,6 +45,14 @@ func (m *mockProfileUserRepo) Update(u *domain.User) error {
 		return m.updateErr
 	}
 	m.user = u
+	return nil
+}
+
+func (m *mockProfileUserRepo) Delete(_ string) error {
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
+	m.deleted = true
 	return nil
 }
 
@@ -166,6 +177,57 @@ func TestProfile_UploadAvatar_TooLarge(t *testing.T) {
 
 	const sixMB = 6 * 1024 * 1024
 	_, err := svc.UploadAvatar("user-1", "big.jpg", "image/jpeg", sixMB, bytes.NewReader([]byte{}))
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if ae, ok := err.(*apperror.AppError); !ok || ae.Code != "BAD_REQUEST" {
+		t.Errorf("expected BAD_REQUEST, got %v", err)
+	}
+}
+
+// ── DeleteAccount tests ───────────────────────────────────────────────────────
+
+func sampleUserWithPassword(pw string) *domain.User {
+	hash, _ := hashutil.Hash(pw)
+	u := sampleUser()
+	u.PasswordHash = hash
+	return u
+}
+
+func TestProfile_DeleteAccount_OK(t *testing.T) {
+	repo := &mockProfileUserRepo{user: sampleUserWithPassword("correct-pw")}
+	svc := NewProfileService(repo, nil)
+
+	err := svc.DeleteAccount("user-1", "correct-pw")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !repo.deleted {
+		t.Error("expected Delete to be called on repo")
+	}
+}
+
+func TestProfile_DeleteAccount_WrongPassword(t *testing.T) {
+	repo := &mockProfileUserRepo{user: sampleUserWithPassword("correct-pw")}
+	svc := NewProfileService(repo, nil)
+
+	err := svc.DeleteAccount("user-1", "wrong-pw")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if ae, ok := err.(*apperror.AppError); !ok || ae.Code != "BAD_REQUEST" {
+		t.Errorf("expected BAD_REQUEST, got %v", err)
+	}
+	if repo.deleted {
+		t.Error("expected Delete NOT to be called on wrong password")
+	}
+}
+
+func TestProfile_DeleteAccount_MissingPassword(t *testing.T) {
+	repo := &mockProfileUserRepo{user: sampleUserWithPassword("correct-pw")}
+	svc := NewProfileService(repo, nil)
+
+	err := svc.DeleteAccount("user-1", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

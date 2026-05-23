@@ -134,11 +134,11 @@ func (s *AuthService) Register(input AuthInput) (*AuthResponse, error) {
 func (s *AuthService) Login(input LoginInput) (*LoginResult, error) {
 	user, err := s.userRepo.FindByEmail(input.Email)
 	if err != nil {
-		return nil, apperror.Unauthorized("invalid credentials")
+		return nil, apperror.Unauthorized("Invalid email or password")
 	}
 
 	if err := hashutil.Verify(input.Password, user.PasswordHash); err != nil {
-		return nil, apperror.Unauthorized("invalid credentials")
+		return nil, apperror.Unauthorized("Invalid email or password")
 	}
 
 	if user.TOTPEnabled {

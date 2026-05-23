@@ -97,6 +97,13 @@ func (r *UserRepo) Create(user *domain.User) error {
 	return nil
 }
 
+func (r *UserRepo) Delete(id string) error {
+	if err := r.db.Delete(&userModel{}, "id = ?", id).Error; err != nil {
+		return apperror.Internal(err.Error())
+	}
+	return nil
+}
+
 func (r *UserRepo) Update(user *domain.User) error {
 	if err := r.db.Model(&userModel{}).Where("id = ?", user.ID).Updates(map[string]interface{}{
 		"name":          user.Name,

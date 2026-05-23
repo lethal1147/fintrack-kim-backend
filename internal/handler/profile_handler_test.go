@@ -13,15 +13,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joakim/fintrack-api/internal/middleware"
 	"github.com/joakim/fintrack-api/internal/service"
+	"github.com/joakim/fintrack-api/pkg/apperror"
 )
 
 // ── mock profile service ───────────────────────────────────────────────────────
 
 type mockProfileSvc struct {
-	userInfo  *service.UserInfo
-	avatarURL string
-	updateErr error
-	uploadErr error
+	userInfo   *service.UserInfo
+	avatarURL  string
+	updateErr  error
+	uploadErr  error
+	deleteErr  error
 }
 
 func (m *mockProfileSvc) UpdateProfile(_ string, _ service.UpdateProfileRequest) (*service.UserInfo, error) {
@@ -30,6 +32,10 @@ func (m *mockProfileSvc) UpdateProfile(_ string, _ service.UpdateProfileRequest)
 
 func (m *mockProfileSvc) UploadAvatar(_, _, _ string, _ int64, _ io.Reader) (string, error) {
 	return m.avatarURL, m.uploadErr
+}
+
+func (m *mockProfileSvc) DeleteAccount(_, _ string) error {
+	return m.deleteErr
 }
 
 // ── router helper ──────────────────────────────────────────────────────────────
@@ -42,6 +48,7 @@ func profileRouter(svc service.ProfileServiceInterface) *gin.Engine {
 	{
 		g.PATCH("", h.Update)
 		g.POST("/avatar", h.UploadAvatar)
+		g.DELETE("", h.DeleteAccount)
 	}
 	return r
 }
@@ -135,5 +142,56 @@ func TestProfile_Avatar_Unauthorized(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status: got %d, want 401", w.Code)
+	}
+}
+
+func TestProfile_DeleteAccount_OK(t *testing.T) {
+	svc := &mockProfileSvc{}
+	r := profileRouter(svc)
+
+	body, _ := json.Marshal(map[string]string{"password": "correct-pw"})
+	req, _ := http.NewRequest(http.MethodDelete, "/profile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+signTestToken("user-1"))
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want 200 — body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProfile_DeleteAccount_WrongPassword(t *testing.T) {
+	svc := &mockProfileSvc{deleteErr: apperror.BadRequest("incorrect password")}
+	r := profileRouter(svc)
+
+	body, _ := json.Marshal(map[string]string{"password": "wrong-pw"})
+	req, _ := http.NewRequest(http.MethodDelete, "/profile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+signTestToken("user-1"))
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want 400 — body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestProfile_DeleteAccount_MissingPassword(t *testing.T) {
+	svc := &mockProfileSvc{}
+	r := profileRouter(svc)
+
+	body, _ := json.Marshal(map[string]string{})
+	req, _ := http.NewRequest(http.MethodDelete, "/profile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+signTestToken("user-1"))
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want 400 — body: %s", w.Code, w.Body.String())
 	}
 }

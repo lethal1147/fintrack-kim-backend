@@ -121,6 +121,7 @@ func (m *mockSecUserRepo) Update(u *domain.User) error {
 	m.updated = u
 	return m.updateErr
 }
+func (m *mockSecUserRepo) Delete(_ string) error { return nil }
 
 // ─── mock OTP repo ────────────────────────────────────────────────────────────
 

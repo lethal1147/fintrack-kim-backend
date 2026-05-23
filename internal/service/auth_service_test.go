@@ -60,6 +60,14 @@ func (m *mockUserRepo) Update(user *domain.User) error {
 	return nil
 }
 
+func (m *mockUserRepo) Delete(id string) error {
+	if u, ok := m.byID[id]; ok {
+		delete(m.byEmail, u.Email)
+		delete(m.byID, id)
+	}
+	return nil
+}
+
 // -- mock SessionRepository --
 
 type mockSessionRepo struct {
