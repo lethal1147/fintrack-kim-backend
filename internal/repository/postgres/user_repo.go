@@ -18,6 +18,8 @@ type userModel struct {
 	PasswordHash string
 	Provider     string `gorm:"not null;default:local"`
 	ProviderID   string
+	TOTPSecret   string
+	TOTPEnabled  bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -33,6 +35,8 @@ func toUserDomain(m *userModel) *domain.User {
 		PasswordHash: m.PasswordHash,
 		Provider:     domain.AuthProvider(m.Provider),
 		ProviderID:   m.ProviderID,
+		TOTPSecret:   m.TOTPSecret,
+		TOTPEnabled:  m.TOTPEnabled,
 		CreatedAt:    m.CreatedAt,
 		UpdatedAt:    m.UpdatedAt,
 	}
@@ -98,6 +102,8 @@ func (r *UserRepo) Update(user *domain.User) error {
 		"name":          user.Name,
 		"avatar_url":    user.AvatarURL,
 		"password_hash": user.PasswordHash,
+		"totp_secret":   user.TOTPSecret,
+		"totp_enabled":  user.TOTPEnabled,
 		"updated_at":    time.Now(),
 	}).Error; err != nil {
 		return apperror.Internal(err.Error())
